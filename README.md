@@ -6,6 +6,16 @@ Opt-in proactive **5-hour usage guard** for long Claude Code sessions (macOS —
 
 Arm with `/usage-guard` before Fable-scale or batch work. An external daemon reads your usage (zero session tokens), sets `PAUSE` before the wall, sends macOS notifications, and you resume with `/usage-guard resume` after reset — without chat reminders that get queued behind subagents.
 
+## Who is this for?
+
+- Long **Fable 5** or Opus sessions that burn the **5-hour window** quickly
+- **Subagent / batch** work where mid-session chat messages stay **queued**
+- You want to **pause near 90%** and avoid **extra usage wallet** charges at 100%
+- **macOS** — Claude Desktop **Code** tab or Claude Code **CLI**
+- You can arm once per session (`/usage-guard`) — no per-project setup
+
+> **Proactive vs reactive:** [claude-auto-retry](https://github.com/cheapestinference/claude-auto-retry) resumes *after* you hit the wall. usage-guard tries to pause *before* it.
+
 ## Why this exists
 
 On long Fable runs, chat messages queue while subagents work — so "stop at 90%" reminders never land in time. Hitting 100% can burn **extra usage wallet**. Stop buttons may not fully halt subagents. This tool uses an **external control file + upfront session contract** instead of mid-run chat.
@@ -116,10 +126,21 @@ Optional `~/.usage-guard/config.json`:
 - Pause/resume is **best-effort** and **cooperative**; it does not modify Claude Desktop or guarantee you avoid extra usage charges.
 - You are responsible for how you use your Claude subscription.
 
-## Complements
+## Related tools
 
-- [claude-auto-retry](https://github.com/cheapestinference/claude-auto-retry) — reactive resume after hard limit (optional belt-and-suspenders)
-- [ai-usage-monitors](https://github.com/minhvoio/ai-usage-monitors) `cu` — usage reading (MIT, credited in code)
+| Tool | When to use |
+|------|-------------|
+| **usage-guard** (this repo) | Proactive pause ~90%, checkpoints, resume after reset |
+| [claude-auto-retry](https://github.com/cheapestinference/claude-auto-retry) | Reactive auto-`continue` after limit message |
+| [ai-usage-monitors](https://github.com/minhvoio/ai-usage-monitors) `cu` | Check current 5h % in terminal (no guard) |
+
+Many people use **usage-guard + claude-auto-retry** together: pause early when possible; auto-continue if you still hit 100%.
+
+## Demo
+
+<!-- TODO: add a 30–60s screen recording (arm → status → macOS notification) and link it here -->
+
+Screen recording welcome — see [docs/MANUAL_CHECKLIST.md](docs/MANUAL_CHECKLIST.md#issue-optional-demo-gif).
 
 ## Contributing
 

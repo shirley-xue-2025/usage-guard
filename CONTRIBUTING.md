@@ -57,3 +57,7 @@ We may squash-merge small PRs to keep history readable.
 ## Community
 
 Be respectful and constructive. This project is maintained in spare time — patience is appreciated.
+
+## Maintainer notes
+
+See [docs/MANUAL_CHECKLIST.md](docs/MANUAL_CHECKLIST.md) for GitHub settings, topics, and community outreach (not automated from git).

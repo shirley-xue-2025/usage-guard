@@ -57,7 +57,7 @@ claude login
 usage-guard doctor   # expect ✓ Usage API
 ```
 
-See [docs/SPIKE_RESULTS.md](docs/SPIKE_RESULTS.md).
+See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 ## Use
 

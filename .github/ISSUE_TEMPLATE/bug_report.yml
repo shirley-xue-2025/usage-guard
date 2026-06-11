@@ -30,7 +30,7 @@ body:
     id: doctor
     attributes:
       label: usage-guard doctor output
-      description: Run `usage-guard doctor` and paste output (redact nothing except if you prefer to hide email)
+      description: Run `usage-guard doctor` and paste output (redact access tokens if present)
       render: shell
     validations:
       required: false

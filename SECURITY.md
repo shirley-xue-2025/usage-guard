@@ -10,13 +10,15 @@
 
 Please **do not** open a public issue for security problems.
 
-Email **xc.shirley+github@gmail.com** with:
+Use **[GitHub Private vulnerability reporting](https://github.com/shirley-xue-2025/usage-guard/security/advisories/new)** (Security → Advisories → Report a vulnerability).
+
+If that is unavailable, open a **private** [GitHub Discussion](https://github.com/shirley-xue-2025/usage-guard/discussions) or contact the maintainer via their GitHub profile.
+
+Include:
 
 - Description of the issue
 - Steps to reproduce
 - Impact (e.g. credential exposure, arbitrary command execution)
-
-We aim to respond within 7 days.
 
 ## What this tool touches
 

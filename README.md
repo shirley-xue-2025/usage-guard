@@ -136,12 +136,6 @@ Optional `~/.usage-guard/config.json`:
 
 Many people use **usage-guard + claude-auto-retry** together: pause early when possible; auto-continue if you still hit 100%.
 
-## Demo
-
-<!-- TODO: add a 30–60s screen recording (arm → status → macOS notification) and link it here -->
-
-Screen recording welcome — see [docs/MANUAL_CHECKLIST.md](docs/MANUAL_CHECKLIST.md#issue-optional-demo-gif).
-
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports: use the [issue template](https://github.com/shirley-xue-2025/usage-guard/issues/new/choose).

@@ -1,5 +1,7 @@
 # usage-guard
 
+[![test](https://github.com/shirley-xue-2025/usage-guard/actions/workflows/test.yml/badge.svg)](https://github.com/shirley-xue-2025/usage-guard/actions/workflows/test.yml)
+
 Opt-in proactive **5-hour usage guard** for long Claude Code sessions (macOS — Desktop Code tab and CLI).
 
 Arm with `/usage-guard` before Fable-scale or batch work. An external daemon reads your usage (zero session tokens), sets `PAUSE` before the wall, sends macOS notifications, and you resume with `/usage-guard resume` after reset — without chat reminders that get queued behind subagents.
@@ -27,6 +29,7 @@ Session (cooperative)  ←── read state at safe checkpoints only
 ## Install (macOS)
 
 ```bash
+git clone https://github.com/shirley-xue-2025/usage-guard.git
 cd usage-guard
 chmod +x install.sh
 ./install.sh
@@ -36,7 +39,7 @@ usage-guard doctor
 
 ### One-time: enable usage reads (Desktop-only users)
 
-Spike on Desktop-only machines: OAuth tokens may not exist until Claude Code CLI login:
+OAuth tokens may not exist until Claude Code CLI login:
 
 ```bash
 npm i -g @anthropic-ai/claude-code
@@ -79,8 +82,10 @@ usage-guard poll            # one-shot usage fetch
 ### Mock mode (no OAuth)
 
 ```bash
+cd usage-guard
 PYTHONPATH=. python3 -m usage_guard arm --mock-percent 91 --force
 PYTHONPATH=. python3 -m usage_guard status
+PYTHONPATH=. python3 -m usage_guard disarm
 ```
 
 ## Configuration
@@ -103,11 +108,23 @@ Optional `~/.usage-guard/config.json`:
 - **Force quit** — use `/usage-guard resume` in a new session; checkpoint is on disk
 - **Extra wallet at 100%** — guard aims to pause at 90%; cannot stop Desktop if session ignores PAUSE
 
+## Disclaimer
+
+**Not affiliated with Anthropic.** usage-guard is an independent community tool.
+
+- Reads usage via the same **OAuth usage endpoint** used by tools like [`cu`](https://github.com/minhvoio/ai-usage-monitors) — this is **not** a documented public API and may change without notice.
+- Pause/resume is **best-effort** and **cooperative**; it does not modify Claude Desktop or guarantee you avoid extra usage charges.
+- You are responsible for how you use your Claude subscription.
+
 ## Complements
 
 - [claude-auto-retry](https://github.com/cheapestinference/claude-auto-retry) — reactive resume after hard limit (optional belt-and-suspenders)
 - [ai-usage-monitors](https://github.com/minhvoio/ai-usage-monitors) `cu` — usage reading (MIT, credited in code)
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports: use the [issue template](https://github.com/shirley-xue-2025/usage-guard/issues/new/choose).
+
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE). Copyright (c) 2026 Shirley Xue.

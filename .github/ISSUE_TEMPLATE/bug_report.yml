@@ -1,0 +1,75 @@
+name: Bug report
+description: Something isn't working as expected
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please include `usage-guard doctor` output if usage/auth is involved.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect vs what actually happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. /usage-guard ...
+        2. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: usage-guard doctor output
+      description: Run `usage-guard doctor` and paste output (redact nothing except if you prefer to hide email)
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: status
+    attributes:
+      label: usage-guard status output
+      render: shell
+    validations:
+      required: false
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      options:
+        - Claude Desktop Code tab
+        - Claude Code CLI
+        - Both
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: e.g. macOS 15.3
+    validations:
+      required: false
+
+  - type: dropdown
+    id: model
+    attributes:
+      label: Model (if relevant)
+      options:
+        - Fable 5
+        - Opus
+        - Sonnet
+        - Other / not sure
+    validations:
+      required: false

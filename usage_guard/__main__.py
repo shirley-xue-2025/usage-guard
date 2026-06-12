@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from usage_guard.control import (
     default_checkpoint,
     default_control,
     ensure_dirs,
+    merge_done,
     new_session_id,
     read_checkpoint,
     read_control,
@@ -32,6 +34,31 @@ def _python() -> str:
 
 def _daemon_module() -> list[str]:
     return [_python(), "-m", "usage_guard.daemon"]
+
+
+def _daemon_alive() -> bool:
+    if not PID_PATH.exists():
+        return False
+    try:
+        pid = int(PID_PATH.read_text(encoding="utf-8").strip())
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def wait_for_first_poll(*, timeout: float = 45.0, interval: float = 0.5) -> bool:
+    """Block until daemon writes first usage percent, or timeout."""
+    deadline = time.monotonic() + timeout
+    pid_grace_until = time.monotonic() + 3.0
+    while time.monotonic() < deadline:
+        control = read_control()
+        if control.get("five_hour_percent") is not None:
+            return True
+        if time.monotonic() > pid_grace_until and not _daemon_alive():
+            return False
+        time.sleep(interval)
+    return False
 
 
 def cmd_doctor(_: argparse.Namespace) -> int:
@@ -63,9 +90,9 @@ def cmd_arm(args: argparse.Namespace) -> int:
         {
             "armed": True,
             "state": "RUN",
-            "phase": "armed",
+            "phase": "waiting_first_poll",
             "session_id": session_id,
-            "note": "armed by CLI",
+            "note": "armed by CLI; waiting for first usage poll",
         }
     )
     write_control(control)
@@ -88,7 +115,33 @@ def cmd_arm(args: argparse.Namespace) -> int:
         encoding="utf-8",
     )
 
-    print(json.dumps({"session_id": session_id, "control_path": str(CONTROL_PATH)}, indent=2))
+    result: dict = {
+        "session_id": session_id,
+        "control_path": str(CONTROL_PATH),
+    }
+
+    if args.wait:
+        if wait_for_first_poll(timeout=args.wait_timeout):
+            control = read_control()
+            result["first_poll"] = True
+            result["five_hour_percent"] = control.get("five_hour_percent")
+            result["phase"] = control.get("phase")
+        else:
+            control = read_control()
+            result["first_poll"] = False
+            result["phase"] = control.get("phase")
+            if not _daemon_alive():
+                print(
+                    "error: daemon exited before first poll — check ~/.usage-guard/daemon.log",
+                    file=sys.stderr,
+                )
+                return 1
+            result["note"] = (
+                f"first poll not received within {args.wait_timeout}s; "
+                "daemon may still be warming up"
+            )
+
+    print(json.dumps(result, indent=2))
     return 0
 
 
@@ -130,6 +183,46 @@ def cmd_status(_: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_checkpoint(args: argparse.Namespace) -> int:
+    session_id = args.session_id or read_control().get("session_id")
+    if not session_id:
+        print("error: no session_id (arm first or pass --session-id)", file=sys.stderr)
+        return 1
+
+    checkpoint = read_checkpoint(session_id) or default_checkpoint()
+
+    if args.json:
+        try:
+            updates = json.loads(args.json)
+        except json.JSONDecodeError as exc:
+            print(f"error: invalid --json: {exc}", file=sys.stderr)
+            return 1
+        if not isinstance(updates, dict):
+            print("error: --json must be an object", file=sys.stderr)
+            return 1
+        if "done" in updates:
+            checkpoint["done"] = merge_done(checkpoint.get("done"), updates["done"])
+        if "next" in updates:
+            checkpoint["next"] = updates["next"]
+        if "note" in updates:
+            checkpoint["note"] = updates["note"]
+        if "task" in updates:
+            checkpoint["task"] = updates["task"]
+    else:
+        if args.done:
+            checkpoint["done"] = merge_done(checkpoint.get("done"), args.done)
+        if args.next is not None:
+            checkpoint["next"] = args.next
+        if args.note is not None:
+            checkpoint["note"] = args.note
+        if args.task is not None:
+            checkpoint["task"] = args.task
+
+    write_checkpoint(session_id, checkpoint)
+    print(json.dumps({"session_id": session_id, "checkpoint": checkpoint}, indent=2))
+    return 0
+
+
 def cmd_poll(_: argparse.Namespace) -> int:
     """One-shot usage poll (for skill/testing)."""
     try:
@@ -157,7 +250,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--task", default="")
     p.add_argument("--force", action="store_true")
     p.add_argument("--mock-percent", type=float)
+    p.add_argument("--wait", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--wait-timeout", type=float, default=45.0)
     p.set_defaults(func=cmd_arm)
+
+    p = sub.add_parser("checkpoint", help="Update session checkpoint (atomic merge)")
+    p.add_argument("--session-id")
+    p.add_argument("--done", action="append", default=[])
+    p.add_argument("--next")
+    p.add_argument("--note")
+    p.add_argument("--task")
+    p.add_argument("--json", help='JSON object, e.g. {"done":["item"],"next":"..."}')
+    p.set_defaults(func=cmd_checkpoint)
 
     p = sub.add_parser("disarm", help="Stop daemon and disarm")
     p.set_defaults(func=cmd_disarm)

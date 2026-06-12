@@ -1,5 +1,17 @@
 # Troubleshooting
 
+## `/usage-guard` not in slash command picker
+
+The skill sets `disable-model-invocation: true` so Claude does not auto-arm sessions. On some Desktop / Fable builds it may also be **hidden from the picker** — **type `/usage-guard` manually** anyway (autocomplete optional).
+
+If the user asks you to "use usage-guard" without the slash command, the model should read `~/.claude/skills/usage-guard/SKILL.md` and run `arm.sh`.
+
+Re-run `./install.sh` and restart Desktop if the skill folder is missing.
+
+## Null `five_hour_percent` right after arm
+
+Expected for a few seconds: `phase` is `waiting_first_poll`. `arm` blocks until the first poll (or ~45s timeout). If telemetry stays null, run `usage-guard status` — confirm `daemon: pid …` is shown. Check `~/.usage-guard/daemon.log`.
+
 ## `usage-guard doctor` fails: no OAuth credentials
 
 Desktop Code can run sessions without the Claude Code CLI, but **usage reads** need OAuth tokens in Keychain or `~/.claude/.credentials.json`.

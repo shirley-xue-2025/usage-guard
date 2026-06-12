@@ -137,6 +137,17 @@ def session_check_seconds(percent: float | None, state: str) -> int:
     return 5 * 60
 
 
+def merge_done(existing: list[Any] | None, new_items: list[Any] | None) -> list[Any]:
+    """Append unique items to done, preserving order."""
+    result = list(existing or [])
+    seen = set(result)
+    for item in new_items or []:
+        if item not in seen:
+            result.append(item)
+            seen.add(item)
+    return result
+
+
 def ensure_dirs() -> None:
     GUARD_DIR.mkdir(parents=True, exist_ok=True)
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)

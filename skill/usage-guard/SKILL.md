@@ -1,6 +1,6 @@
 ---
 name: usage-guard
-description: Arm proactive 5-hour usage protection for long Claude Code / Fable sessions. Invoke at session start only — external daemon monitors usage, session checks control file at safe checkpoints, pauses before extra wallet burn, resumes after reset.
+description: Arm proactive 5-hour usage protection for long Claude Code / Fable sessions. User types /usage-guard at session start (may not appear in slash picker — type it anyway). If user mentions usage-guard by name without the slash command, read this file and run arm.sh. External daemon monitors usage; session obeys control.json state at safe checkpoints.
 disable-model-invocation: true
 user-invocable: true
 allowed-tools: Bash, Read, Write, Edit
@@ -10,6 +10,16 @@ argument-hint: [resume | your task description]
 # usage-guard
 
 Proactive usage guard for long Claude Code sessions (Desktop Code tab or CLI). **Invoke once at session start** before heavy Fable / batch work.
+
+## If the user mentions usage-guard without `/usage-guard`
+
+When the user says "use usage-guard", "pay attention to usage limits", or names this skill but does not run the slash command:
+
+1. **Follow this file** (you are reading it — treat that as the contract).
+2. Run `arm.sh` via bash before heavy work (same as ARM MODE below).
+3. Tell the user: `/usage-guard` is the normal entry point; with `disable-model-invocation` it may not show in the slash picker — **typing `/usage-guard` still works**.
+
+Do **not** auto-arm on your own initiative without the user asking for usage protection.
 
 ## When the user invokes `/usage-guard`
 
@@ -30,7 +40,12 @@ bash "${CLAUDE_SKILL_DIR}/scripts/arm.sh" {{ARGUMENTS}}
 
 If arm fails, **stop** and tell the user to run `usage-guard doctor` in Terminal. Do not start heavy work without a successful arm.
 
-Read `~/.usage-guard/control.json` once and confirm `armed: true`.
+Read `~/.usage-guard/control.json` once and confirm:
+
+- `armed: true`
+- `phase` is `normal` (or `five_hour_percent` is set) — **not** stuck on `waiting_first_poll` without a live daemon
+
+**Warmup:** right after arm, `phase` may be `waiting_first_poll` with null telemetry while the daemon fetches usage. `arm.sh` blocks up to ~45s for the first poll. If `phase` is still `waiting_first_poll` after arm returns, the daemon is warming up — **do not** start heavy subagent batches yet; re-read control.json in a few seconds. If `five_hour_percent` stays null and daemon is dead (`usage-guard status` → daemon not running), stop and run `usage-guard doctor`.
 
 ---
 
@@ -48,6 +63,13 @@ You are now **usage-guard armed**. Follow this for the rest of this session:
 
 - Path: `~/.usage-guard/sessions/<session_id>/checkpoint.json` (session_id from control.json)
 - After **every completed unit** (file, batch item, subagent return): update checkpoint (`done`, `next`, `note`).
+- **Prefer bash** (atomic, no Read-before-Write harness issue):
+
+```bash
+bash "${CLAUDE_SKILL_DIR}/scripts/checkpoint.sh" --json '{"done":["item-id"],"next":"next-item","note":""}'
+```
+
+Or flags: `checkpoint.sh --done item-id --next "next-item" --note ""`
 - User can run `usage-guard status` in Terminal to see progress if Desktop UI is stuck.
 
 ### Safe checkpoints (critical for Fable / subagents)

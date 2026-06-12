@@ -65,8 +65,8 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 1. Open your project in the **Code** tab
 2. Optional: select **Fable** model for heavy work
-3. Run: `/usage-guard your long task description`
-4. Approve the arm script when prompted
+3. Run: `/usage-guard your long task description` (type manually if it does not appear in the slash picker)
+4. Approve the arm script when prompted — arm waits for the first usage poll before returning
 5. Let it run — watch Terminal: `usage-guard status`
 
 ### After reset (new session OK)

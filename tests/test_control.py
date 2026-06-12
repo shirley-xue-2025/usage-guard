@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from usage_guard.control import (
     default_control,
+    merge_done,
     poll_interval_seconds,
     session_check_seconds,
 )
@@ -43,3 +44,8 @@ def test_default_control_has_required_keys():
     assert c["session_id"] == "abc123"
     assert c["state"] == "IDLE"
     assert "session_check_seconds" in c
+
+
+def test_merge_done_preserves_order_and_dedupes():
+    assert merge_done(["a", "b"], ["b", "c"]) == ["a", "b", "c"]
+    assert merge_done(None, ["x"]) == ["x"]

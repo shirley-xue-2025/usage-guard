@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.3] - 2026-06-12
+
+### Added
+
+- `last_reset_at` in control.json when the 5-hour window resets (reset signal sessions can read)
+- `active_session_ids` tracks multi-session arcs; `arm --join` / `join.sh` registers a sitting without restarting daemon
+
+### Changed
+
+- Arm JSON includes `five_hour_resets_at` after first poll
+- Skill: post-reset null percent semantics, self-scheduled wake-ups, multi-session guidance, `session_check_seconds` purpose
+- `usage-guard status` shows `last_reset_at`, `sleep_until`, active sessions
+
 ## [0.1.2] - 2026-06-12
 
 ### Added
@@ -48,6 +61,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Requires `claude login` once for usage reads on Desktop-only setups
 - Uses unofficial OAuth usage endpoint (may change)
 
+[0.1.3]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.3
 [0.1.2]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.2
 [0.1.1]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.1
 [0.1.0]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.0

@@ -82,12 +82,52 @@ def _arm_status_warnings(prior: dict, *, prior_daemon_alive: bool) -> str | None
     return None
 
 
+def _merge_active_session_ids(prior: dict, session_id: str) -> list[str]:
+    active = list(prior.get("active_session_ids") or [])
+    for sid in (prior.get("session_id"), session_id):
+        if sid and sid not in active:
+            active.append(sid)
+    return active
+
+
 def cmd_arm(args: argparse.Namespace) -> int:
     ensure_dirs()
     prior = read_control()
     prior_daemon_alive = _daemon_alive()
-    session_id = args.session_id or new_session_id()
     task = args.task or ""
+
+    if args.join:
+        if not prior_daemon_alive:
+            print(
+                "error: --join requires a running daemon; arm normally first",
+                file=sys.stderr,
+            )
+            return 1
+        control = read_control()
+        sitting_id = args.session_id or new_session_id()
+        checkpoint = read_checkpoint(sitting_id) or default_checkpoint(task)
+        if task and not checkpoint.get("task"):
+            checkpoint["task"] = task
+        write_checkpoint(sitting_id, checkpoint)
+        control["active_session_ids"] = _merge_active_session_ids(control, sitting_id)
+        write_control(control)
+        print(
+            json.dumps(
+                {
+                    "joined": True,
+                    "primary_session_id": control.get("session_id"),
+                    "sitting_session_id": sitting_id,
+                    "active_session_ids": control.get("active_session_ids"),
+                    "five_hour_percent": control.get("five_hour_percent"),
+                    "five_hour_resets_at": control.get("five_hour_resets_at"),
+                    "state": control.get("state"),
+                },
+                indent=2,
+            )
+        )
+        return 0
+
+    session_id = args.session_id or new_session_id()
 
     if PID_PATH.exists():
         try:
@@ -123,6 +163,7 @@ def cmd_arm(args: argparse.Namespace) -> int:
             "state": "RUN",
             "phase": "waiting_first_poll",
             "session_id": session_id,
+            "active_session_ids": _merge_active_session_ids(prior, session_id),
             "note": "armed by CLI; waiting for first usage poll",
         }
     )
@@ -161,7 +202,9 @@ def cmd_arm(args: argparse.Namespace) -> int:
             control = read_control()
             result["first_poll"] = True
             result["five_hour_percent"] = control.get("five_hour_percent")
+            result["five_hour_resets_at"] = control.get("five_hour_resets_at")
             result["phase"] = control.get("phase")
+            result["active_session_ids"] = control.get("active_session_ids")
         else:
             control = read_control()
             result["first_poll"] = False
@@ -205,8 +248,13 @@ def cmd_status(_: argparse.Namespace) -> int:
     print(f"5h:      {control.get('five_hour_percent')}%")
     print(f"resets:  {control.get('five_hour_resets_at')}")
     print(f"resume:  {control.get('resume_at')}")
-    print(f"check:   every {control.get('session_check_seconds')}s (session)")
+    print(f"reset:   {control.get('last_reset_at')}")
+    print(f"sleep:   {control.get('sleep_until')}")
+    print(f"loop:    every {control.get('session_check_seconds')}s (/loop hint)")
     print(f"session: {session_id}")
+    active = control.get("active_session_ids") or []
+    if active:
+        print(f"sessions:{', '.join(active)}")
     if checkpoint:
         done = len(checkpoint.get("done") or [])
         print(f"task:    {checkpoint.get('task') or '(none)'}")
@@ -288,6 +336,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--mock-percent", type=float)
     p.add_argument("--wait", action=argparse.BooleanOptionalAction, default=True)
     p.add_argument("--wait-timeout", type=float, default=45.0)
+    p.add_argument(
+        "--join",
+        action="store_true",
+        help="Register this sitting's checkpoint without restarting daemon",
+    )
     p.set_defaults(func=cmd_arm)
 
     p = sub.add_parser("checkpoint", help="Update session checkpoint (atomic merge)")

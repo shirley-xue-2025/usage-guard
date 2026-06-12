@@ -53,6 +53,7 @@ Read `~/.usage-guard/control.json` once and confirm:
 - `armed: true`
 - `phase` is `normal` (or `five_hour_percent` is set) — **not** stuck on `waiting_first_poll` without a live daemon
 - If arm JSON output includes `"warning"`, tell the user the prior guard was not active and this is a fresh arm
+- Report go/no-go using arm JSON: `five_hour_percent`, `five_hour_resets_at`, `state` (no second read required)
 
 **Warmup:** right after arm, `phase` may be `waiting_first_poll` with null telemetry while the daemon fetches usage. `arm.sh` blocks up to ~45s for the first poll. If `phase` is still `waiting_first_poll` after arm returns, the daemon is warming up — **do not** start heavy subagent batches yet; re-read control.json in a few seconds. If `five_hour_percent` stays null and daemon is dead (`usage-guard status` → daemon not running), stop and run `usage-guard doctor`.
 
@@ -67,6 +68,8 @@ You are now **usage-guard armed**. Follow this for the rest of this session:
 - Path: `~/.usage-guard/control.json`
 - Obey **`state` only**: `RUN` = continue, `PAUSE` or `COOLDOWN` = stop dispatching new work.
 - **Never** decide pause/continue from `five_hour_percent` yourself.
+- After a **window reset**, `five_hour_percent` may be `null` until the daemon's next poll. If `state` is `RUN`, trust `state` (check `last_reset_at` if present) — do not wait for the user to return.
+- **`session_check_seconds`** — recommended delay for self-paced `/loop` guard ticks while armed. During `PAUSE`/`COOLDOWN`, prefer **`sleep_until`** instead. Daemon polling is separate (`daemon_next_poll_at`).
 
 ### Checkpoint file
 
@@ -78,7 +81,21 @@ You are now **usage-guard armed**. Follow this for the rest of this session:
 bash "${CLAUDE_SKILL_DIR}/scripts/checkpoint.sh" --json '{"done":["item-id"],"next":"next-item","note":""}'
 ```
 
-Or flags: `checkpoint.sh --done item-id --next "next-item" --note ""`
+Or flags: `checkpoint.sh --done item-id --next "next-item" --note "" --task "short label for status"`
+
+Set **`task`** on the first checkpoint (via `/usage-guard <task>` at arm, or `checkpoint.sh --task`) so `usage-guard status` stays readable.
+
+### Multi-session arcs (brain + code session)
+
+PAUSE/RUN is **account-level** (one daemon). Checkpoints are **per `session_id`**.
+
+- First sitting: `/usage-guard <task>` (arms daemon, sets primary `session_id`).
+- Later sitting (daemon already running): `bash "${CLAUDE_SKILL_DIR}/scripts/join.sh" --task "code session label"` — adds a checkpoint without restarting the daemon or overwriting the primary id.
+- To **share one checkpoint chain**, reuse the same id: `arm.sh` with `--session-id <existing>` (advanced).
+- On resume, read checkpoint for **your** `sitting_session_id` if you joined; default `session_id` in control.json is the primary.
+
+`active_session_ids` in control.json lists all sittings on this arc.
+
 - User can run `usage-guard status` in Terminal to see progress if Desktop UI is stuck.
 
 ### Safe checkpoints (critical for Fable / subagents)
@@ -97,9 +114,10 @@ Read control.json only at these times:
 
 1. Finish the **current atomic unit** only — do not abandon mid-write.
 2. Update checkpoint with `done`, `next`, clear `note`.
-3. Tell the user: paused near 5-hour limit; daemon will notify at reset.
+3. Tell the user: paused near 5-hour limit; macOS may notify at reset (CLI sessions won't see it — poll `control.json`).
 4. **Do not** start new subagents, batches, or long tool chains this turn.
 5. During `COOLDOWN`, use **`sleep_until`** (or `session_check_seconds`, which is set to ~remaining time until reset) for `/loop` delay — do **not** poll every 5 minutes while waiting for reset. Cap single `/loop` sleep at 59m; chain if `sleep_until` is still in the future until `state == RUN`.
+6. **Schedule your own wake-up** — poll `control.json` after `sleep_until` (or confirm via `last_reset_at`). **Never** end the turn with "tell me when you're back"; blocked on reset = self-scheduled poll.
 
 ### On `state == RUN` with existing checkpoint
 

@@ -14,6 +14,7 @@ from usage_guard.control import (
     default_control,
     ensure_dirs,
     load_config,
+    now_iso,
     poll_interval_seconds,
     read_control,
     seconds_until_reset,
@@ -62,6 +63,7 @@ def update_control_from_usage(
         control["state"] = "RUN"
         control["phase"] = "normal"
         control["resume_at"] = None
+        control["last_reset_at"] = now_iso()
         control["note"] = "usage dropped below threshold"
         notify("usage-guard", f"RUN again at {percent:.0f}% — you may resume work.")
     elif control.get("state") not in {"PAUSE", "COOLDOWN"}:
@@ -127,6 +129,7 @@ def run_daemon(session_id: str, *, mock_percent: float | None = None) -> int:
                 else:
                     control["state"] = "RUN"
                     control["phase"] = "normal"
+                    control["last_reset_at"] = now_iso()
                     control["note"] = "cooldown complete"
                     write_control(control)
                     notify("usage-guard", "5-hour window reset — run /usage-guard resume if needed.")

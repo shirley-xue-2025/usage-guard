@@ -25,6 +25,8 @@ def default_control(session_id: str | None = None) -> dict:
         "five_hour_resets_at": None,
         "resume_at": None,
         "sleep_until": None,
+        "last_reset_at": None,
+        "active_session_ids": [],
         "daemon_next_poll_at": None,
         "session_check_seconds": 600,
         "phase": "idle",

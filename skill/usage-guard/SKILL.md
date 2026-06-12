@@ -53,7 +53,14 @@ Read `~/.usage-guard/control.json` once and confirm:
 - `armed: true`
 - `phase` is `normal` (or `five_hour_percent` is set) — **not** stuck on `waiting_first_poll` without a live daemon
 - If arm JSON output includes `"warning"`, tell the user the prior guard was not active and this is a fresh arm
-- Report go/no-go using arm JSON: `five_hour_percent`, `five_hour_resets_at`, `state` (no second read required)
+- Report go/no-go using arm JSON: `five_hour_percent`, `five_hour_reset_local`, `seconds_until_five_hour_reset`, `state` — **not** raw UTC strings
+
+**If arm JSON has `"already_armed": true`** (daemon from a prior sitting):
+
+- **Proceed** — guard is active; do not `--force` restart unless user asks.
+- Use `session_id` from the JSON for checkpoints (read/write `sessions/<session_id>/checkpoint.json`).
+- **Same arc, new sitting** with its own checkpoint: `join.sh --task "short label"` instead of re-arming.
+- **Continuing paused work**: `/usage-guard resume` (not a fresh arm).
 
 **Warmup:** right after arm, `phase` may be `waiting_first_poll` with null telemetry while the daemon fetches usage. `arm.sh` blocks up to ~45s for the first poll. If `phase` is still `waiting_first_poll` after arm returns, the daemon is warming up — **do not** start heavy subagent batches yet; re-read control.json in a few seconds. If `five_hour_percent` stays null and daemon is dead (`usage-guard status` → daemon not running), stop and run `usage-guard doctor`.
 
@@ -68,6 +75,11 @@ You are now **usage-guard armed**. Follow this for the rest of this session:
 - Path: `~/.usage-guard/control.json`
 - Obey **`state` only**: `RUN` = continue, `PAUSE` or `COOLDOWN` = stop dispatching new work.
 - **Never** decide pause/continue from `five_hour_percent` yourself.
+- **Never compare timestamps yourself** (`five_hour_resets_at`, `sleep_until`, etc.). UTC trips up models. Use precomputed fields only:
+  - `seconds_until_five_hour_reset` — positive = reset not yet; negative or `five_hour_reset_pending: false` = reset time passed
+  - `five_hour_reset_local` — for user-facing reports (local timezone, not UTC)
+  - If `state` is **`RUN`**, continue — **do not** call percent "stale" because a UTC clock comparison looked past. Wrong timezone math caused false "reset already passed" bugs.
+- **Post-reset poll lag:** `five_hour_reset_pending: false` + non-null `five_hour_percent` (e.g. 88% with reset time an hour ago) means the **old window's percent** until the daemon re-polls — not a reason to pause. Check `awaiting_post_reset_poll` and `percent_note`; trust **`state`**. Expect correction at `daemon_next_poll_at` / `daemon_next_poll_local`.
 - After a **window reset**, `five_hour_percent` may be `null` until the daemon's next poll. If `state` is `RUN`, trust `state` (check `last_reset_at` if present) — do not wait for the user to return.
 - **`session_check_seconds`** — recommended delay for self-paced `/loop` guard ticks while armed. During `PAUSE`/`COOLDOWN`, prefer **`sleep_until`** instead. Daemon polling is separate (`daemon_next_poll_at`).
 
@@ -78,10 +90,10 @@ You are now **usage-guard armed**. Follow this for the rest of this session:
 - **Prefer bash** (atomic, no Read-before-Write harness issue):
 
 ```bash
-bash "${CLAUDE_SKILL_DIR}/scripts/checkpoint.sh" --json '{"done":["item-id"],"next":"next-item","note":""}'
+bash "${CLAUDE_SKILL_DIR}/scripts/checkpoint.sh" --quiet --json '{"done":["item-id"],"next":"next-item","note":""}'
 ```
 
-Or flags: `checkpoint.sh --done item-id --next "next-item" --note "" --task "short label for status"`
+Or flags: `checkpoint.sh --quiet --done item-id --next "next-item" --note "" --task "short label for status"`
 
 Set **`task`** on the first checkpoint (via `/usage-guard <task>` at arm, or `checkpoint.sh --task`) so `usage-guard status` stays readable.
 
@@ -145,7 +157,7 @@ Example loop prompt:
 
 ## 4. RESUME MODE — `/usage-guard resume`
 
-1. Read `~/.usage-guard/control.json` — if `state` is not `RUN`, tell user to wait (show `resume_at` / `five_hour_resets_at`).
+1. Read `~/.usage-guard/control.json` — if `state` is not `RUN`, tell user to wait (show `five_hour_reset_local` / `sleep_until_local`, or `seconds_until_*`).
 2. Read checkpoint for this `session_id`.
 3. Continue from `next`; dedupe using `done`.
 4. Re-arm only if `armed` is false: run `arm.sh` again.

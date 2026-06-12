@@ -61,6 +61,7 @@ def read_json(path: Path) -> dict | None:
 
 def write_control(payload: dict) -> None:
     payload["updated_at"] = now_iso()
+    enrich_time_fields(payload)
     write_json_atomic(CONTROL_PATH, payload)
 
 
@@ -138,14 +139,88 @@ def parse_reset_at(value: str | None) -> datetime | None:
 
 
 def seconds_until_reset(resets_at: str | None, margin: int = 60) -> int | None:
-    reset_dt = parse_reset_at(resets_at)
+    """Seconds until reset, floored at 0 (for daemon sleep scheduling)."""
+    raw = seconds_until_timestamp(resets_at, margin=margin)
+    if raw is None:
+        return None
+    return max(0, raw)
+
+
+def seconds_until_timestamp(value: str | None, *, margin: int = 0) -> int | None:
+    """Signed seconds until an ISO timestamp. Negative means already passed."""
+    reset_dt = parse_reset_at(value)
     if not reset_dt:
         return None
     now = datetime.now(timezone.utc)
     if reset_dt.tzinfo is None:
         reset_dt = reset_dt.replace(tzinfo=timezone.utc)
-    delta = (reset_dt - now).total_seconds() - margin
-    return max(0, int(delta))
+    return int((reset_dt - now).total_seconds() - margin)
+
+
+def format_local_time(value: str | None) -> str | None:
+    """Human-readable local time for sessions and status output."""
+    reset_dt = parse_reset_at(value)
+    if not reset_dt:
+        return None
+    return reset_dt.astimezone().strftime("%Y-%m-%d %H:%M %Z")
+
+
+def enrich_time_fields(control: dict) -> dict:
+    """Add precomputed timing fields so sessions never parse UTC themselves."""
+    resets_at = control.get("five_hour_resets_at")
+    if resets_at:
+        sec = seconds_until_timestamp(resets_at, margin=0)
+        if sec is not None:
+            control["seconds_until_five_hour_reset"] = sec
+            control["five_hour_reset_pending"] = sec > 0
+        local = format_local_time(resets_at)
+        if local:
+            control["five_hour_reset_local"] = local
+
+    sleep_until = control.get("sleep_until")
+    if sleep_until:
+        sec = seconds_until_timestamp(sleep_until, margin=0)
+        if sec is not None:
+            control["seconds_until_sleep_until"] = sec
+        local = format_local_time(sleep_until)
+        if local:
+            control["sleep_until_local"] = local
+    else:
+        control.pop("seconds_until_sleep_until", None)
+        control.pop("sleep_until_local", None)
+
+    resume_at = control.get("resume_at")
+    if resume_at:
+        local = format_local_time(resume_at)
+        if local:
+            control["resume_at_local"] = local
+
+    pending = control.get("five_hour_reset_pending")
+    percent = control.get("five_hour_percent")
+    if (
+        control.get("state") == "RUN"
+        and resets_at
+        and pending is False
+        and percent is not None
+    ):
+        control["awaiting_post_reset_poll"] = True
+        control["percent_note"] = (
+            "Window reset time passed; percent may still reflect the old window "
+            "until the next daemon poll. Trust state; expect correction at "
+            "daemon_next_poll_at."
+        )
+    else:
+        control.pop("awaiting_post_reset_poll", None)
+        control.pop("percent_note", None)
+
+    next_poll = control.get("daemon_next_poll_at")
+    if isinstance(next_poll, (int, float)):
+        poll_dt = datetime.fromtimestamp(next_poll, tz=timezone.utc)
+        control["daemon_next_poll_local"] = poll_dt.astimezone().strftime(
+            "%Y-%m-%d %H:%M %Z"
+        )
+
+    return control
 
 
 def session_check_seconds(percent: float | None, state: str) -> int:

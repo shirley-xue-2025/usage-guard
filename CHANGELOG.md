@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.4] - 2026-06-13
+
+### Added
+
+- Precomputed timing fields: `seconds_until_five_hour_reset`, `five_hour_reset_local`, `five_hour_reset_pending`, `sleep_until_local`, `daemon_next_poll_local`
+- `awaiting_post_reset_poll` + `percent_note` when reset passed but percent not yet re-polled
+- `checkpoint --quiet` / `-q` for one-line confirmation
+- `already_armed` arm JSON includes `action`, `guidance`, and enriched timing fields
+
+### Changed
+
+- Skill: never compare UTC; `already_armed` branch; post-reset stale-high percent; prefer `checkpoint.sh --quiet`
+- `usage-guard status` shows local reset time and minutes-until-reset
+
 ## [0.1.3] - 2026-06-12
 
 ### Added
@@ -61,6 +75,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Requires `claude login` once for usage reads on Desktop-only setups
 - Uses unofficial OAuth usage endpoint (may change)
 
+[0.1.4]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.4
 [0.1.3]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.3
 [0.1.2]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.2
 [0.1.1]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.1

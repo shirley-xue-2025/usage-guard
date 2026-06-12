@@ -12,9 +12,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from usage_guard.control import (
+    apply_wait_schedule,
     default_checkpoint,
     default_control,
     ensure_dirs,
+    enrich_time_fields,
     merge_done,
     new_session_id,
     read_checkpoint,
@@ -135,14 +137,31 @@ def cmd_arm(args: argparse.Namespace) -> int:
             os.kill(pid, 0)
             if not args.force:
                 control = read_control()
+                enrich_time_fields(control)
                 print(
                     json.dumps(
                         {
                             "already_armed": True,
+                            "action": "proceed",
+                            "guidance": (
+                                "Daemon already running from a prior sitting. "
+                                "Use session_id for checkpoints. "
+                                "Same arc, new sitting: join.sh --task 'label'. "
+                                "Do not use --force unless intentionally restarting."
+                            ),
                             "session_id": control.get("session_id"),
+                            "active_session_ids": control.get("active_session_ids"),
                             "armed": control.get("armed"),
                             "daemon_alive": True,
                             "five_hour_percent": control.get("five_hour_percent"),
+                            "five_hour_reset_local": control.get("five_hour_reset_local"),
+                            "seconds_until_five_hour_reset": control.get(
+                                "seconds_until_five_hour_reset"
+                            ),
+                            "awaiting_post_reset_poll": control.get(
+                                "awaiting_post_reset_poll"
+                            ),
+                            "percent_note": control.get("percent_note"),
                             "state": control.get("state"),
                         },
                         indent=2,
@@ -203,6 +222,11 @@ def cmd_arm(args: argparse.Namespace) -> int:
             result["first_poll"] = True
             result["five_hour_percent"] = control.get("five_hour_percent")
             result["five_hour_resets_at"] = control.get("five_hour_resets_at")
+            result["five_hour_reset_local"] = control.get("five_hour_reset_local")
+            result["seconds_until_five_hour_reset"] = control.get(
+                "seconds_until_five_hour_reset"
+            )
+            result["five_hour_reset_pending"] = control.get("five_hour_reset_pending")
             result["phase"] = control.get("phase")
             result["active_session_ids"] = control.get("active_session_ids")
         else:
@@ -246,10 +270,21 @@ def cmd_status(_: argparse.Namespace) -> int:
     print(f"armed:   {control.get('armed')}")
     print(f"state:   {control.get('state')} ({control.get('phase')})")
     print(f"5h:      {control.get('five_hour_percent')}%")
-    print(f"resets:  {control.get('five_hour_resets_at')}")
-    print(f"resume:  {control.get('resume_at')}")
+    resets_local = control.get("five_hour_reset_local")
+    resets_in = control.get("seconds_until_five_hour_reset")
+    if resets_local and resets_in is not None:
+        when = f"in {resets_in // 60}m" if resets_in > 0 else "passed"
+        print(f"resets:  {resets_local} ({when})")
+    else:
+        print(f"resets:  {control.get('five_hour_resets_at')}")
+    print(f"resume:  {control.get('resume_at_local') or control.get('resume_at')}")
     print(f"reset:   {control.get('last_reset_at')}")
-    print(f"sleep:   {control.get('sleep_until')}")
+    sleep_local = control.get("sleep_until_local")
+    sleep_in = control.get("seconds_until_sleep_until")
+    if sleep_local and sleep_in is not None:
+        print(f"sleep:   {sleep_local} (in {sleep_in // 60}m)")
+    elif control.get("sleep_until"):
+        print(f"sleep:   {control.get('sleep_until')}")
     print(f"loop:    every {control.get('session_check_seconds')}s (/loop hint)")
     print(f"session: {session_id}")
     active = control.get("active_session_ids") or []
@@ -303,7 +338,15 @@ def cmd_checkpoint(args: argparse.Namespace) -> int:
             checkpoint["task"] = args.task
 
     write_checkpoint(session_id, checkpoint)
-    print(json.dumps({"session_id": session_id, "checkpoint": checkpoint}, indent=2))
+    if args.quiet:
+        done = checkpoint.get("done") or []
+        last_done = done[-1] if done else None
+        print(
+            f"checkpoint saved: session={session_id} "
+            f"done={last_done!r} next={checkpoint.get('next')!r}"
+        )
+    else:
+        print(json.dumps({"session_id": session_id, "checkpoint": checkpoint}, indent=2))
     return 0
 
 
@@ -350,6 +393,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--note")
     p.add_argument("--task")
     p.add_argument("--json", help='JSON object, e.g. {"done":["item"],"next":"..."}')
+    p.add_argument("--quiet", "-q", action="store_true", help="One-line confirmation")
     p.set_defaults(func=cmd_checkpoint)
 
     p = sub.add_parser("disarm", help="Stop daemon and disarm")

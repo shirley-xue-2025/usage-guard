@@ -10,8 +10,10 @@ from datetime import datetime, timedelta, timezone
 from usage_guard.control import (
     apply_wait_schedule,
     default_control,
+    enrich_time_fields,
     merge_done,
     poll_interval_seconds,
+    seconds_until_timestamp,
     session_check_seconds,
 )
 
@@ -64,6 +66,33 @@ def test_apply_wait_schedule_cooldown_uses_reset_time():
     apply_wait_schedule(control, margin=60)
     assert control["sleep_until"] == reset_at
     assert control["session_check_seconds"] == 59 * 60
+
+
+def test_seconds_until_timestamp_future():
+    future = (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat()
+    assert seconds_until_timestamp(future, margin=0) > 0
+
+
+def test_enrich_time_fields_post_reset_poll_lag():
+    past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    control = {
+        "state": "RUN",
+        "five_hour_resets_at": past,
+        "five_hour_percent": 89.0,
+    }
+    enrich_time_fields(control)
+    assert control["five_hour_reset_pending"] is False
+    assert control["awaiting_post_reset_poll"] is True
+    assert "percent_note" in control
+
+
+def test_enrich_time_fields_adds_local_and_seconds():
+    future = (datetime.now(timezone.utc) + timedelta(minutes=45)).isoformat()
+    control = {"five_hour_resets_at": future, "state": "RUN"}
+    enrich_time_fields(control)
+    assert control["five_hour_reset_pending"] is True
+    assert control["seconds_until_five_hour_reset"] > 0
+    assert "five_hour_reset_local" in control
 
 
 def test_apply_wait_schedule_run_clears_sleep_until():

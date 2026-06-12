@@ -1,6 +1,6 @@
 ---
 name: usage-guard
-description: Arm proactive 5-hour usage protection for long Claude Code / Fable sessions. User types /usage-guard at session start (may not appear in slash picker — type it anyway). If user mentions usage-guard by name without the slash command, read this file and run arm.sh. External daemon monitors usage; session obeys control.json state at safe checkpoints.
+description: Arm proactive 5-hour usage protection for long Claude Code / Fable sessions. Daemon reads account-level 5-hour window usage (not per-session) — catches blind spots when chat shows 58% but shared window is 94%. User types /usage-guard at session start (may not appear in slash picker — type it anyway). Re-arm every sitting; arms do not survive Desktop quit or daemon exit. If user mentions usage-guard by name without the slash command, read this file and run arm.sh.
 disable-model-invocation: true
 user-invocable: true
 allowed-tools: Bash, Read, Write, Edit
@@ -10,6 +10,14 @@ argument-hint: [resume | your task description]
 # usage-guard
 
 Proactive usage guard for long Claude Code sessions (Desktop Code tab or CLI). **Invoke once at session start** before heavy Fable / batch work.
+
+### Why account-level monitoring matters
+
+Each Claude session only sees its own usage. The **shared 5-hour window** is account-level — you can start at 58% in one session while another tab or earlier work already pushed the window to 94%. The daemon polls the OAuth usage API (same as Desktop Settings) so the guard sees the real window, not just this chat's view.
+
+### Re-arm every sitting
+
+**Arms do not survive** Desktop quit, crash, or daemon exit. At the start of **every** new sitting, run `/usage-guard` (or `/usage-guard resume` if continuing a paused task). If `arm.sh` prints `"warning"`, the previous guard was stale — proceed with the new arm.
 
 ## If the user mentions usage-guard without `/usage-guard`
 
@@ -44,6 +52,7 @@ Read `~/.usage-guard/control.json` once and confirm:
 
 - `armed: true`
 - `phase` is `normal` (or `five_hour_percent` is set) — **not** stuck on `waiting_first_poll` without a live daemon
+- If arm JSON output includes `"warning"`, tell the user the prior guard was not active and this is a fresh arm
 
 **Warmup:** right after arm, `phase` may be `waiting_first_poll` with null telemetry while the daemon fetches usage. `arm.sh` blocks up to ~45s for the first poll. If `phase` is still `waiting_first_poll` after arm returns, the daemon is warming up — **do not** start heavy subagent batches yet; re-read control.json in a few seconds. If `five_hour_percent` stays null and daemon is dead (`usage-guard status` → daemon not running), stop and run `usage-guard doctor`.
 
@@ -90,7 +99,7 @@ Read control.json only at these times:
 2. Update checkpoint with `done`, `next`, clear `note`.
 3. Tell the user: paused near 5-hour limit; daemon will notify at reset.
 4. **Do not** start new subagents, batches, or long tool chains this turn.
-5. Run self-paced `/loop` with delay from `session_check_seconds` in control.json (cap single sleep at 59m; chain if longer until `state == RUN`).
+5. During `COOLDOWN`, use **`sleep_until`** (or `session_check_seconds`, which is set to ~remaining time until reset) for `/loop` delay — do **not** poll every 5 minutes while waiting for reset. Cap single `/loop` sleep at 59m; chain if `sleep_until` is still in the future until `state == RUN`.
 
 ### On `state == RUN` with existing checkpoint
 
@@ -111,7 +120,7 @@ If the user provided a task in `/usage-guard <task>`, begin it under the contrac
 Example loop prompt:
 
 ```text
-/loop Read ~/.usage-guard/control.json. If PAUSE/COOLDOWN: checkpoint and stop new work. If RUN: continue task from checkpoint. Use session_check_seconds for next delay.
+/loop Read ~/.usage-guard/control.json. If PAUSE/COOLDOWN: checkpoint and stop new work; sleep until sleep_until (or session_check_seconds). If RUN: continue task from checkpoint.
 ```
 
 ---
@@ -129,4 +138,5 @@ Example loop prompt:
 
 - Cannot force-stop a running subagent from outside; guard prevents **new** work after PAUSE.
 - Progress safety depends on frequent checkpoint writes.
-- After force-quit Desktop, use `/usage-guard resume` in a **new** session.
+- After force-quit Desktop, use `/usage-guard resume` in a **new** session (re-arms daemon if needed).
+- Daemon exit does **not** keep the guard active — always `/usage-guard` or `/usage-guard resume` at the start of a sitting.

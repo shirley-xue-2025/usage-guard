@@ -65,8 +65,27 @@ def cmd_doctor(_: argparse.Namespace) -> int:
     return doctor()
 
 
+def _arm_status_warnings(prior: dict, *, prior_daemon_alive: bool) -> str | None:
+    if prior.get("armed") and prior_daemon_alive:
+        return None
+    if prior.get("armed") and not prior_daemon_alive:
+        return (
+            "Guard was armed but daemon was not running — re-armed fresh. "
+            "Re-arm at the start of every sitting; arms do not survive quit or crash."
+        )
+    if not prior.get("armed"):
+        return (
+            "Guard was not armed (IDLE/disarmed) — started fresh. "
+            "Re-arm at the start of every sitting. "
+            "Use /usage-guard resume to continue a paused task from checkpoint."
+        )
+    return None
+
+
 def cmd_arm(args: argparse.Namespace) -> int:
     ensure_dirs()
+    prior = read_control()
+    prior_daemon_alive = _daemon_alive()
     session_id = args.session_id or new_session_id()
     task = args.task or ""
 
@@ -75,8 +94,20 @@ def cmd_arm(args: argparse.Namespace) -> int:
             pid = int(PID_PATH.read_text(encoding="utf-8").strip())
             os.kill(pid, 0)
             if not args.force:
-                print(f"Daemon already running (pid {pid}). Use --force to restart.")
-                print(f"session_id={read_control().get('session_id')}")
+                control = read_control()
+                print(
+                    json.dumps(
+                        {
+                            "already_armed": True,
+                            "session_id": control.get("session_id"),
+                            "armed": control.get("armed"),
+                            "daemon_alive": True,
+                            "five_hour_percent": control.get("five_hour_percent"),
+                            "state": control.get("state"),
+                        },
+                        indent=2,
+                    )
+                )
                 return 0
         except OSError:
             PID_PATH.unlink(missing_ok=True)
@@ -118,7 +149,12 @@ def cmd_arm(args: argparse.Namespace) -> int:
     result: dict = {
         "session_id": session_id,
         "control_path": str(CONTROL_PATH),
+        "prior_armed": bool(prior.get("armed")),
+        "prior_daemon_alive": prior_daemon_alive,
     }
+    warning = _arm_status_warnings(prior, prior_daemon_alive=prior_daemon_alive)
+    if warning:
+        result["warning"] = warning
 
     if args.wait:
         if wait_for_first_poll(timeout=args.wait_timeout):

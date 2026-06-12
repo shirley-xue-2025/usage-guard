@@ -18,7 +18,7 @@ Arm with `/usage-guard` before Fable-scale or batch work. An external daemon rea
 
 ## Why this exists
 
-On long Fable runs, chat messages queue while subagents work — so "stop at 90%" reminders never land in time. Hitting 100% can burn **extra usage wallet**. Stop buttons may not fully halt subagents. This tool uses an **external control file + upfront session contract** instead of mid-run chat.
+On long Fable runs, chat messages queue while subagents work — so "stop at 90%" reminders never land in time. Hitting 100% can burn **extra usage wallet**. Stop buttons may not fully halt subagents. Each chat only sees its own usage; the daemon reads the **account-level 5-hour window** (same as Desktop Settings), so a session that "looks" fine at 58% can already be at 94% shared. This tool uses an **external control file + upfront session contract** instead of mid-run chat.
 
 ## How it works
 

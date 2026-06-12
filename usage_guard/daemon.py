@@ -10,12 +10,13 @@ import time
 from datetime import datetime, timezone
 
 from usage_guard.control import (
+    apply_wait_schedule,
     default_control,
     ensure_dirs,
     load_config,
     poll_interval_seconds,
     read_control,
-    session_check_seconds,
+    seconds_until_reset,
     write_control,
 )
 from usage_guard.notify import notify
@@ -33,26 +34,6 @@ def log(msg: str) -> None:
         pass
 
 
-def parse_reset_at(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-
-
-def seconds_until_reset(resets_at: str | None, margin: int) -> int | None:
-    reset_dt = parse_reset_at(resets_at)
-    if not reset_dt:
-        return None
-    now = datetime.now(timezone.utc)
-    if reset_dt.tzinfo is None:
-        reset_dt = reset_dt.replace(tzinfo=timezone.utc)
-    delta = (reset_dt - now).total_seconds() - margin
-    return max(0, int(delta))
-
-
 def update_control_from_usage(
     control: dict,
     usage: dict,
@@ -66,7 +47,6 @@ def update_control_from_usage(
 
     control["five_hour_percent"] = percent
     control["five_hour_resets_at"] = resets_at
-    control["session_check_seconds"] = session_check_seconds(percent, control.get("state", "RUN"))
 
     if percent is not None and percent >= threshold:
         if control.get("state") != "COOLDOWN":
@@ -101,6 +81,8 @@ def update_control_from_usage(
             "usage-guard",
             f"Warning: {percent:.0f}% of 5-hour window — avoid starting long subagent batches.",
         )
+
+    apply_wait_schedule(control, margin=config["cooldown_margin_seconds"])
 
     wait = poll_interval_seconds(percent)
     if wait:
@@ -158,6 +140,7 @@ def run_daemon(session_id: str, *, mock_percent: float | None = None) -> int:
             if control.get("state") == "PAUSE":
                 control["state"] = "COOLDOWN"
                 control["phase"] = "cooldown"
+                apply_wait_schedule(control, margin=config["cooldown_margin_seconds"])
             write_control(control)
             log(
                 f"poll percent={usage.get('fiveHourPercent')} state={control.get('state')}"

@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.2] - 2026-06-12
+
+### Added
+
+- `sleep_until` in control.json during PAUSE/COOLDOWN (aligned with `five_hour_resets_at`)
+- Arm JSON reports `prior_armed`, `prior_daemon_alive`, and `warning` when re-arming after stale guard
+
+### Changed
+
+- `session_check_seconds` during cooldown matches time until reset (capped at 59m), not fixed 5m polling
+- Skill documents account-level vs per-session usage blind spot and re-arm-every-sitting expectation
+
 ## [0.1.1] - 2026-06-12
 
 ### Added
@@ -36,5 +48,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Requires `claude login` once for usage reads on Desktop-only setups
 - Uses unofficial OAuth usage endpoint (may change)
 
+[0.1.2]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.2
 [0.1.1]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.1
 [0.1.0]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.0

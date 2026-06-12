@@ -24,6 +24,7 @@ def default_control(session_id: str | None = None) -> dict:
         "five_hour_percent": None,
         "five_hour_resets_at": None,
         "resume_at": None,
+        "sleep_until": None,
         "daemon_next_poll_at": None,
         "session_check_seconds": 600,
         "phase": "idle",
@@ -125,6 +126,26 @@ def poll_interval_seconds(percent: float | None) -> int:
     return 0
 
 
+def parse_reset_at(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def seconds_until_reset(resets_at: str | None, margin: int = 60) -> int | None:
+    reset_dt = parse_reset_at(resets_at)
+    if not reset_dt:
+        return None
+    now = datetime.now(timezone.utc)
+    if reset_dt.tzinfo is None:
+        reset_dt = reset_dt.replace(tzinfo=timezone.utc)
+    delta = (reset_dt - now).total_seconds() - margin
+    return max(0, int(delta))
+
+
 def session_check_seconds(percent: float | None, state: str) -> int:
     if state in {"PAUSE", "COOLDOWN"}:
         return 5 * 60
@@ -135,6 +156,25 @@ def session_check_seconds(percent: float | None, state: str) -> int:
     if percent < 85:
         return 10 * 60
     return 5 * 60
+
+
+def apply_wait_schedule(control: dict, *, margin: int = 60) -> dict:
+    """Set session_check_seconds and sleep_until for PAUSE/COOLDOWN waits."""
+    state = control.get("state", "RUN")
+    percent = control.get("five_hour_percent")
+    resets_at = control.get("resume_at") or control.get("five_hour_resets_at")
+
+    if state in {"PAUSE", "COOLDOWN"} and resets_at:
+        remaining = seconds_until_reset(resets_at, margin)
+        if remaining is not None and remaining > 0:
+            control["sleep_until"] = resets_at
+            # Cap at 59m so a single /loop sleep covers most of the wait.
+            control["session_check_seconds"] = max(60, min(remaining, 59 * 60))
+            return control
+
+    control["sleep_until"] = None
+    control["session_check_seconds"] = session_check_seconds(percent, state)
+    return control
 
 
 def merge_done(existing: list[Any] | None, new_items: list[Any] | None) -> list[Any]:

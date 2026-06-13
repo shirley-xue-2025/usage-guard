@@ -1,6 +1,6 @@
 ---
 name: usage-guard
-description: Arm proactive 5-hour usage protection for long Claude Code / Fable sessions. Daemon reads account-level 5-hour window usage (not per-session) — catches blind spots when chat shows 58% but shared window is 94%. User types /usage-guard at session start (may not appear in slash picker — type it anyway). Re-arm every sitting; arms do not survive Desktop quit or daemon exit. If user mentions usage-guard by name without the slash command, read this file and run arm.sh.
+description: Arm proactive 5-hour usage protection for long Claude Code sessions (batch, subagents, high window % at start). Daemon reads account-level 5-hour window usage (not per-session). User types /usage-guard at session start. Re-arm every sitting. If user mentions usage-guard by name, read this file and run arm.sh.
 disable-model-invocation: true
 user-invocable: true
 allowed-tools: Bash, Read, Write, Edit
@@ -9,7 +9,7 @@ argument-hint: [resume | your task description]
 
 # usage-guard
 
-Proactive usage guard for long Claude Code sessions (Desktop Code tab or CLI). **Invoke once at session start** before heavy Fable / batch work.
+Proactive usage guard for long Claude Code sessions (Desktop Code tab or CLI). **Invoke once at session start** before heavy batch, subagent, or overnight work — especially when the account window is already partly used.
 
 ### Why account-level monitoring matters
 
@@ -112,7 +112,7 @@ PAUSE/RUN is **account-level** (one daemon). Checkpoints are **per `session_id`*
 
 - User can run `usage-guard status` in Terminal to see progress if Desktop UI is stuck.
 
-### Safe checkpoints (critical for Fable / subagents)
+### Safe checkpoints (critical for subagents / long runs)
 
 Read control.json only at these times:
 
@@ -145,7 +145,7 @@ Read control.json only at these times:
 
 Continue from `next` in checkpoint; skip items in `done`.
 
-### Subagent discipline (Fable)
+### Subagent discipline (long batch runs)
 
 - Prefer **smaller** subagent batches when armed (e.g. 3–5 items, not 50).
 - Before each dispatch: read control.json; if not `RUN`, do not dispatch.

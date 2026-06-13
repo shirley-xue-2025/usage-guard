@@ -4,21 +4,24 @@
 
 Opt-in proactive **5-hour usage guard** for long Claude Code sessions (macOS — Desktop Code tab and CLI).
 
-Arm with `/usage-guard` before Fable-scale or batch work. An external daemon reads your usage (zero session tokens), sets `PAUSE` before the wall, sends macOS notifications, and you resume with `/usage-guard resume` after reset — without chat reminders that get queued behind subagents.
+Arm with `/usage-guard` before long batch, subagent, or overnight work — especially when the shared window is already partly used. An external daemon reads your usage (zero session tokens), sets `PAUSE` before the wall, sends macOS notifications, and you resume with `/usage-guard resume` after reset — without chat reminders that get queued behind subagents.
 
 ## Who is this for?
 
-- Long **Fable 5** or Opus sessions that burn the **5-hour window** quickly
+- **Long Claude Code sessions** that burn the **5-hour window** quickly (batch jobs, subagents, `/loop`, brain + code multi-session arcs)
+- Work that starts when usage is **already high** — arm gives account-level visibility, not just this chat's view
 - **Subagent / batch** work where mid-session chat messages stay **queued**
 - You want to **pause near 90%** and avoid **extra usage wallet** charges at 100%
 - **macOS** — Claude Desktop **Code** tab or Claude Code **CLI**
 - You can arm once per session (`/usage-guard`) — no per-project setup
 
+> Also used on heavy model runs (e.g. Fable when available). Same 5-hour wall either way.
+
 > **Proactive vs reactive:** [claude-auto-retry](https://github.com/cheapestinference/claude-auto-retry) resumes *after* you hit the wall. usage-guard tries to pause *before* it.
 
 ## Why this exists
 
-On long Fable runs, chat messages queue while subagents work — so "stop at 90%" reminders never land in time. Hitting 100% can burn **extra usage wallet**. Stop buttons may not fully halt subagents. Each chat only sees its own usage; the daemon reads the **account-level 5-hour window** (same as Desktop Settings), so a session that "looks" fine at 58% can already be at 94% shared. This tool uses an **external control file + upfront session contract** instead of mid-run chat.
+On long runs, chat messages queue while subagents work — so "stop at 90%" reminders never land in time. Hitting 100% can burn **extra usage wallet**. Stop buttons may not fully halt subagents. Each chat only sees its own usage; the daemon reads the **account-level 5-hour window** (same as Desktop Settings), so a session that "looks" fine at 58% can already be at 94% shared. This tool uses an **external control file + upfront session contract** instead of mid-run chat.
 
 ## How it works
 
@@ -47,6 +50,19 @@ export PATH="$HOME/.local/bin:$PATH"   # add to ~/.zshrc if needed
 usage-guard doctor
 ```
 
+### Updating
+
+> **Active development** — we ship fixes frequently from real session dogfood.
+
+```bash
+cd usage-guard          # your clone
+git pull
+./install.sh            # refreshes skill + CLI (git pull alone is not enough)
+usage-guard doctor      # checks credentials + shows update notice if available
+```
+
+`doctor` compares your installed version to the latest GitHub release (cached 24h). Set `USAGE_GUARD_NO_UPDATE_CHECK=1` to skip.
+
 ### One-time: enable usage reads (Desktop-only users)
 
 OAuth tokens may not exist until Claude Code CLI login:
@@ -64,10 +80,9 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 ### Desktop Code tab
 
 1. Open your project in the **Code** tab
-2. Optional: select **Fable** model for heavy work
-3. Run: `/usage-guard your long task description` (type manually if it does not appear in the slash picker)
-4. Approve the arm script when prompted — arm waits for the first usage poll before returning
-5. Let it run — watch Terminal: `usage-guard status`
+2. Run: `/usage-guard your long task description` (type manually if it does not appear in the slash picker)
+3. Approve the arm script when prompted — arm waits for the first usage poll before returning
+4. Let it run — watch Terminal: `usage-guard status`
 
 ### After reset (new session OK)
 

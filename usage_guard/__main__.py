@@ -28,6 +28,7 @@ from usage_guard.control import (
 )
 from usage_guard.daemon import stop_daemon
 from usage_guard.paths import CONTROL_PATH, GUARD_DIR, LOG_PATH, PID_PATH
+from usage_guard.update_check import check_for_update, print_update_notice
 from usage_guard.usage_fetch import UsageFetchError, doctor, get_usage
 
 
@@ -65,7 +66,12 @@ def wait_for_first_poll(*, timeout: float = 45.0, interval: float = 0.5) -> bool
 
 
 def cmd_doctor(_: argparse.Namespace) -> int:
-    return doctor()
+    from usage_guard import __version__
+
+    print(f"usage-guard v{__version__}")
+    rc = doctor()
+    print_update_notice(check_for_update())
+    return rc
 
 
 def _arm_status_warnings(prior: dict, *, prior_daemon_alive: bool) -> str | None:

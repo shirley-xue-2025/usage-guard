@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.6] - 2026-06-13
+
+### Added
+
+- `usage-guard doctor` shows installed version and optional GitHub update notice (24h cache)
+- README **Updating** section: `git pull && ./install.sh`
+
+### Changed
+
+- `__version__` synced to releases (was stuck at 0.1.0)
+- README/SKILL tone: long sessions + high window % at start (not Fable-only)
+
 ## [0.1.5] - 2026-06-13
 
 ### Fixed
@@ -90,6 +102,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Requires `claude login` once for usage reads on Desktop-only setups
 - Uses unofficial OAuth usage endpoint (may change)
 
+[0.1.6]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.6
 [0.1.5]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.5
 [0.1.4]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.4
 [0.1.3]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.3

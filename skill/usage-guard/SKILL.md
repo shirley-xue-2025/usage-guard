@@ -58,9 +58,11 @@ Read `~/.usage-guard/control.json` once and confirm:
 **If arm JSON has `"already_armed": true`** (daemon from a prior sitting):
 
 - **Proceed** — guard is active; do not `--force` restart unless user asks.
-- Use `session_id` from the JSON for checkpoints (read/write `sessions/<session_id>/checkpoint.json`).
-- **Same arc, new sitting** with its own checkpoint: `join.sh --task "short label"` instead of re-arming.
-- **Continuing paused work**: `/usage-guard resume` (not a fresh arm).
+- **Same arc, new sitting** → `join.sh --task "label"` (not arm with a task — task is ignored on already_armed; JSON includes `task_ignored` if you tried).
+- **After join** → `checkpoint.sh` writes to `sitting_session_id` automatically (stored in control.json). Do **not** use primary `session_id` unless you pass `--session-id` intentionally.
+- **Continuing paused work** → `/usage-guard resume` (not join, not fresh arm).
+
+**Decision tree:** already_armed + same sitting → proceed on `checkpoint_writes_target` | new sitting same arc → join.sh | paused task → resume | dead daemon → arm fresh
 
 **Warmup:** right after arm, `phase` may be `waiting_first_poll` with null telemetry while the daemon fetches usage. `arm.sh` blocks up to ~45s for the first poll. If `phase` is still `waiting_first_poll` after arm returns, the daemon is warming up — **do not** start heavy subagent batches yet; re-read control.json in a few seconds. If `five_hour_percent` stays null and daemon is dead (`usage-guard status` → daemon not running), stop and run `usage-guard doctor`.
 
@@ -101,12 +103,12 @@ Set **`task`** on the first checkpoint (via `/usage-guard <task>` at arm, or `ch
 
 PAUSE/RUN is **account-level** (one daemon). Checkpoints are **per `session_id`**.
 
-- First sitting: `/usage-guard <task>` (arms daemon, sets primary `session_id`).
-- Later sitting (daemon already running): `bash "${CLAUDE_SKILL_DIR}/scripts/join.sh" --task "code session label"` — adds a checkpoint without restarting the daemon or overwriting the primary id.
-- To **share one checkpoint chain**, reuse the same id: `arm.sh` with `--session-id <existing>` (advanced).
-- On resume, read checkpoint for **your** `sitting_session_id` if you joined; default `session_id` in control.json is the primary.
+- First sitting: `/usage-guard <task>` (arms daemon; sets primary `session_id` and `sitting_session_id`).
+- Later sitting (daemon already running): `join.sh --task "this sitting's label"` — sets `sitting_session_id` in control.json; **all `checkpoint.sh` writes go there** until the next arm/join.
+- To **share one checkpoint chain** across sittings (advanced): pass `--session-id <existing>` to checkpoint.sh explicitly.
+- **join** = new sitting, new checkpoint file, same daemon. **resume** = continue a **paused** task from checkpoint (COOLDOWN/PAUSE arc), not "daemon already live."
 
-`active_session_ids` in control.json lists all sittings on this arc.
+`active_session_ids` lists all sittings; `sitting_session_id` is the active checkpoint write target.
 
 - User can run `usage-guard status` in Terminal to see progress if Desktop UI is stuck.
 
@@ -128,8 +130,16 @@ Read control.json only at these times:
 2. Update checkpoint with `done`, `next`, clear `note`.
 3. Tell the user: paused near 5-hour limit; macOS may notify at reset (CLI sessions won't see it — poll `control.json`).
 4. **Do not** start new subagents, batches, or long tool chains this turn.
-5. During `COOLDOWN`, use **`sleep_until`** (or `session_check_seconds`, which is set to ~remaining time until reset) for `/loop` delay — do **not** poll every 5 minutes while waiting for reset. Cap single `/loop` sleep at 59m; chain if `sleep_until` is still in the future until `state == RUN`.
-6. **Schedule your own wake-up** — poll `control.json` after `sleep_until` (or confirm via `last_reset_at`). **Never** end the turn with "tell me when you're back"; blocked on reset = self-scheduled poll.
+5. During `COOLDOWN`, use **`sleep_until`** for wait duration — do **not** poll every 5 minutes. Cap single `/loop` sleep at 59m; chain if `sleep_until` is still in the future until `state == RUN`.
+
+   **If using `/loop`:** delay = `session_check_seconds` or time until `sleep_until` (whichever the control file implies for this wait).
+
+   **If NOT using `/loop`** (brain/chat session with ScheduleWakeup or similar): schedule one wake-up yourself:
+   - `delaySeconds = min(3600, max(1200, seconds_until_five_hour_reset + 180))` when idle (respect prompt-cache ≥1200s)
+   - Wake prompt: re-read `control.json`; if `state == RUN`, continue from checkpoint `next`; if still `COOLDOWN`, schedule again using updated `seconds_until_five_hour_reset`
+   - Do **not** poll faster than your scheduler's cache window
+
+6. **Schedule your own wake-up** — never end the turn with "tell me when you're back"; blocked on reset = self-scheduled poll or ScheduleWakeup.
 
 ### On `state == RUN` with existing checkpoint
 
@@ -140,6 +150,14 @@ Continue from `next` in checkpoint; skip items in `done`.
 - Prefer **smaller** subagent batches when armed (e.g. 3–5 items, not 50).
 - Before each dispatch: read control.json; if not `RUN`, do not dispatch.
 - Main chat orchestrates workload so subagents respect the timetable — **no mid-run chat reminders**.
+
+### Session wrap — report window delta
+
+At session end (or before a long pause), tell the user:
+
+- **5h window now:** `five_hour_percent`, `five_hour_reset_local`, `state`
+- **Delta this sitting** if you recorded percent at arm/join (e.g. "4% → 41% this session")
+- This is the most useful user-facing summary — report it even without subagents
 
 ---
 
@@ -158,7 +176,7 @@ Example loop prompt:
 ## 4. RESUME MODE — `/usage-guard resume`
 
 1. Read `~/.usage-guard/control.json` — if `state` is not `RUN`, tell user to wait (show `five_hour_reset_local` / `sleep_until_local`, or `seconds_until_*`).
-2. Read checkpoint for this `session_id`.
+2. Read checkpoint for `sitting_session_id` (or `checkpoint_writes_target` / primary `session_id` if no join).
 3. Continue from `next`; dedupe using `done`.
 4. Re-arm only if `armed` is false: run `arm.sh` again.
 

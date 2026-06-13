@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 from usage_guard.control import (
     apply_wait_schedule,
+    checkpoint_session_id,
     default_control,
     enrich_time_fields,
     merge_done,
@@ -93,6 +94,13 @@ def test_enrich_time_fields_adds_local_and_seconds():
     assert control["five_hour_reset_pending"] is True
     assert control["seconds_until_five_hour_reset"] > 0
     assert "five_hour_reset_local" in control
+
+
+def test_checkpoint_session_id_prefers_sitting():
+    control = {"session_id": "primary", "sitting_session_id": "sitting"}
+    assert checkpoint_session_id(control) == "sitting"
+    assert checkpoint_session_id(control, "override") == "override"
+    assert checkpoint_session_id({"session_id": "only"}) == "only"
 
 
 def test_apply_wait_schedule_run_clears_sleep_until():

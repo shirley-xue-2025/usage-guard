@@ -27,6 +27,7 @@ def default_control(session_id: str | None = None) -> dict:
         "sleep_until": None,
         "last_reset_at": None,
         "active_session_ids": [],
+        "sitting_session_id": None,
         "daemon_next_poll_at": None,
         "session_check_seconds": 600,
         "phase": "idle",
@@ -99,6 +100,16 @@ def write_checkpoint(session_id: str, payload: dict) -> None:
 
 def read_checkpoint(session_id: str) -> dict | None:
     return read_json(checkpoint_path(session_id))
+
+
+def checkpoint_session_id(control: dict, override: str | None = None) -> str | None:
+    """Which session's checkpoint to read/write (join sets sitting_session_id)."""
+    if override:
+        return override
+    sitting = control.get("sitting_session_id")
+    if sitting:
+        return sitting
+    return control.get("session_id")
 
 
 def load_config() -> dict:

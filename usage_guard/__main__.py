@@ -21,6 +21,7 @@ from usage_guard.control import (
     new_session_id,
     read_checkpoint,
     read_control,
+    checkpoint_session_id,
     session_dir,
     write_checkpoint,
     write_control,
@@ -112,17 +113,24 @@ def cmd_arm(args: argparse.Namespace) -> int:
             checkpoint["task"] = task
         write_checkpoint(sitting_id, checkpoint)
         control["active_session_ids"] = _merge_active_session_ids(control, sitting_id)
+        control["sitting_session_id"] = sitting_id
         write_control(control)
+        enrich_time_fields(control)
         print(
             json.dumps(
                 {
                     "joined": True,
                     "primary_session_id": control.get("session_id"),
                     "sitting_session_id": sitting_id,
+                    "checkpoint_writes_target": sitting_id,
                     "active_session_ids": control.get("active_session_ids"),
                     "five_hour_percent": control.get("five_hour_percent"),
-                    "five_hour_resets_at": control.get("five_hour_resets_at"),
+                    "five_hour_reset_local": control.get("five_hour_reset_local"),
                     "state": control.get("state"),
+                    "guidance": (
+                        "checkpoint.sh (no --session-id) now writes to sitting_session_id "
+                        "until the next arm or join."
+                    ),
                 },
                 indent=2,
             )
@@ -138,35 +146,39 @@ def cmd_arm(args: argparse.Namespace) -> int:
             if not args.force:
                 control = read_control()
                 enrich_time_fields(control)
-                print(
-                    json.dumps(
-                        {
-                            "already_armed": True,
-                            "action": "proceed",
-                            "guidance": (
-                                "Daemon already running from a prior sitting. "
-                                "Use session_id for checkpoints. "
-                                "Same arc, new sitting: join.sh --task 'label'. "
-                                "Do not use --force unless intentionally restarting."
-                            ),
-                            "session_id": control.get("session_id"),
-                            "active_session_ids": control.get("active_session_ids"),
-                            "armed": control.get("armed"),
-                            "daemon_alive": True,
-                            "five_hour_percent": control.get("five_hour_percent"),
-                            "five_hour_reset_local": control.get("five_hour_reset_local"),
-                            "seconds_until_five_hour_reset": control.get(
-                                "seconds_until_five_hour_reset"
-                            ),
-                            "awaiting_post_reset_poll": control.get(
-                                "awaiting_post_reset_poll"
-                            ),
-                            "percent_note": control.get("percent_note"),
-                            "state": control.get("state"),
-                        },
-                        indent=2,
+                payload: dict = {
+                    "already_armed": True,
+                    "action": "proceed",
+                    "guidance": (
+                        "Daemon already running from a prior sitting. "
+                        "Same arc, new sitting: join.sh --task 'label' "
+                        "(checkpoints target sitting_session_id automatically). "
+                        "Do not use --force unless intentionally restarting."
+                    ),
+                    "session_id": control.get("session_id"),
+                    "sitting_session_id": control.get("sitting_session_id"),
+                    "checkpoint_writes_target": checkpoint_session_id(control),
+                    "active_session_ids": control.get("active_session_ids"),
+                    "armed": control.get("armed"),
+                    "daemon_alive": True,
+                    "five_hour_percent": control.get("five_hour_percent"),
+                    "five_hour_reset_local": control.get("five_hour_reset_local"),
+                    "seconds_until_five_hour_reset": control.get(
+                        "seconds_until_five_hour_reset"
+                    ),
+                    "awaiting_post_reset_poll": control.get(
+                        "awaiting_post_reset_poll"
+                    ),
+                    "percent_note": control.get("percent_note"),
+                    "state": control.get("state"),
+                }
+                if task:
+                    payload["task_ignored"] = True
+                    payload["task_note"] = (
+                        "Task label not set on already-armed daemon. "
+                        "Run join.sh with --task instead."
                     )
-                )
+                print(json.dumps(payload, indent=2))
                 return 0
         except OSError:
             PID_PATH.unlink(missing_ok=True)
@@ -182,6 +194,7 @@ def cmd_arm(args: argparse.Namespace) -> int:
             "state": "RUN",
             "phase": "waiting_first_poll",
             "session_id": session_id,
+            "sitting_session_id": session_id,
             "active_session_ids": _merge_active_session_ids(prior, session_id),
             "note": "armed by CLI; waiting for first usage poll",
         }
@@ -262,8 +275,10 @@ def cmd_disarm(_: argparse.Namespace) -> int:
 
 def cmd_status(_: argparse.Namespace) -> int:
     control = read_control()
+    enrich_time_fields(control)
     session_id = control.get("session_id")
-    checkpoint = read_checkpoint(session_id) if session_id else None
+    target_id = checkpoint_session_id(control)
+    checkpoint = read_checkpoint(target_id) if target_id else None
 
     print("usage-guard status")
     print("─" * 40)
@@ -286,7 +301,12 @@ def cmd_status(_: argparse.Namespace) -> int:
     elif control.get("sleep_until"):
         print(f"sleep:   {control.get('sleep_until')}")
     print(f"loop:    every {control.get('session_check_seconds')}s (/loop hint)")
-    print(f"session: {session_id}")
+    print(f"session: {session_id} (primary)")
+    sitting = control.get("sitting_session_id")
+    if sitting and sitting != session_id:
+        print(f"sitting: {sitting} (checkpoint target)")
+    elif target_id:
+        print(f"sitting: {target_id} (checkpoint target)")
     active = control.get("active_session_ids") or []
     if active:
         print(f"sessions:{', '.join(active)}")
@@ -303,7 +323,8 @@ def cmd_status(_: argparse.Namespace) -> int:
 
 
 def cmd_checkpoint(args: argparse.Namespace) -> int:
-    session_id = args.session_id or read_control().get("session_id")
+    control = read_control()
+    session_id = checkpoint_session_id(control, args.session_id)
     if not session_id:
         print("error: no session_id (arm first or pass --session-id)", file=sys.stderr)
         return 1

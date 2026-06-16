@@ -76,6 +76,7 @@ You are now **usage-guard armed**. Follow this for the rest of this session:
 
 - Path: `~/.usage-guard/control.json`
 - Obey **`state` only**: `RUN` = continue, `PAUSE` or `COOLDOWN` = stop dispatching new work.
+- **Exception — `telemetry_lost: true`:** usage API returned no 5h percent for several polls. Guard is **blind** — do **not** start heavy or long work; tell user to check Desktop usage and run `usage-guard doctor`. `state` may still say `RUN`.
 - **Never** decide pause/continue from `five_hour_percent` yourself.
 - **Never compare timestamps yourself** (`five_hour_resets_at`, `sleep_until`, etc.). UTC trips up models. Use precomputed fields only:
   - `seconds_until_five_hour_reset` — positive = reset not yet; negative or `five_hour_reset_pending: false` = reset time passed

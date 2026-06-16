@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.7] - 2026-06-16
+
+### Fixed
+
+- **Blind telemetry:** when usage API returns null percent for 3+ polls, set `telemetry_lost` in control.json (was stuck `RUN` forever)
+- `doctor` warns and exits non-zero when API connects but percent is null (was misleading ✓)
+- OAuth path tries `cu --json` fallback when percent is null
+
+### Changed
+
+- Skill: do not trust `RUN` when `telemetry_lost: true`
+- `usage-guard status` shows telemetry alert
+
 ## [0.1.6] - 2026-06-13
 
 ### Added
@@ -102,6 +115,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Requires `claude login` once for usage reads on Desktop-only setups
 - Uses unofficial OAuth usage endpoint (may change)
 
+[0.1.7]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.7
 [0.1.6]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.6
 [0.1.5]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.5
 [0.1.4]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.4

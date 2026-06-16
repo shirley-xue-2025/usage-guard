@@ -30,6 +30,12 @@ Alternative: install [`cu`](https://github.com/minhvoio/ai-usage-monitors) after
 
 Compare `usage-guard poll` with Claude Desktop → Settings → Usage. Small differences can happen near window boundaries. If they diverge by more than ~5%, open an issue with both readings.
 
+## Usage API returns null percent
+
+`doctor` shows `⚠ connected but five_hour percent is null`. The daemon stays fail-open (`RUN`) but **cannot pause at 90%**. Common causes: expired OAuth token (`claude login`), API outage, or account type edge case.
+
+After 3 null polls, control.json sets `telemetry_lost: true` and `phase: telemetry_lost`. Check Desktop usage manually until `poll` shows a real percent. Try `cu --json` fallback after installing [ai-usage-monitors](https://github.com/minhvoio/ai-usage-monitors).
+
 ## `/loop` and long cooldowns
 
 - `/loop` minimum interval: **1 minute**; dynamic mode up to **~1 hour** per tick

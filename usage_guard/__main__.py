@@ -289,6 +289,8 @@ def cmd_status(_: argparse.Namespace) -> int:
     print("usage-guard status")
     print("─" * 40)
     print(f"armed:   {control.get('armed')}")
+    if control.get("telemetry_lost"):
+        print("alert:   telemetry_lost — API returned no 5h %; do not trust RUN for heavy work")
     print(f"state:   {control.get('state')} ({control.get('phase')})")
     print(f"5h:      {control.get('five_hour_percent')}%")
     resets_local = control.get("five_hour_reset_local")

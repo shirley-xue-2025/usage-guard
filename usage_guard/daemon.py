@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 from usage_guard.control import (
     apply_wait_schedule,
+    apply_telemetry_health,
     default_control,
     ensure_dirs,
     load_config,
@@ -66,7 +67,7 @@ def update_control_from_usage(
         control["last_reset_at"] = now_iso()
         control["note"] = "usage dropped below threshold"
         notify("usage-guard", f"RUN again at {percent:.0f}% — you may resume work.")
-    elif control.get("state") not in {"PAUSE", "COOLDOWN"}:
+    elif control.get("state") not in {"PAUSE", "COOLDOWN"} and percent is not None:
         control["state"] = "RUN"
         control["phase"] = "normal"
         control["resume_at"] = None
@@ -89,6 +90,7 @@ def update_control_from_usage(
     wait = poll_interval_seconds(percent)
     if wait:
         control["daemon_next_poll_at"] = datetime.now(timezone.utc).timestamp() + wait
+    apply_telemetry_health(control, percent)
     return control
 
 

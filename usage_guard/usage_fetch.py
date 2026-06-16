@@ -276,6 +276,14 @@ def get_usage(*, mock_percent: float | None = None) -> dict:
 
     raw = fetch_usage_raw(creds["accessToken"])
     parsed = parse_usage(raw)
+    if parsed.get("fiveHourPercent") is None:
+        try:
+            cu_data = fetch_usage_via_cu()
+            if cu_data.get("fiveHourPercent") is not None:
+                cu_data["source"] = "cu-fallback"
+                return cu_data
+        except Exception:
+            pass
     parsed["source"] = creds.get("source", "oauth")
     return parsed
 
@@ -295,7 +303,13 @@ def doctor() -> int:
 
     try:
         usage = get_usage()
-        print(f"✓ Usage API: five_hour={usage.get('fiveHourPercent')}%")
+        pct = usage.get("fiveHourPercent")
+        if pct is None:
+            print("⚠ Usage API: connected but five_hour percent is null")
+            print("  Guard cannot pause at 90% while blind — check Desktop Settings")
+            print("  Try: claude login · usage-guard poll · install cu (ai-usage-monitors)")
+            return 1
+        print(f"✓ Usage API: five_hour={pct}%")
         if usage.get("fiveHourResetsAt"):
             print(f"  resets at: {usage['fiveHourResetsAt']}")
         return 0

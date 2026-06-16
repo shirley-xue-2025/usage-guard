@@ -29,6 +29,8 @@ def default_control(session_id: str | None = None) -> dict:
         "active_session_ids": [],
         "sitting_session_id": None,
         "daemon_next_poll_at": None,
+        "consecutive_null_polls": 0,
+        "telemetry_lost": False,
         "session_check_seconds": 600,
         "phase": "idle",
         "warned_at_85": False,
@@ -263,6 +265,26 @@ def apply_wait_schedule(control: dict, *, margin: int = 60) -> dict:
     control["sleep_until"] = None
     control["session_check_seconds"] = session_check_seconds(percent, state)
     return control
+
+
+def apply_telemetry_health(control: dict, percent: float | None) -> None:
+    """Track blind polls when the usage API returns null percent."""
+    if percent is not None:
+        control["consecutive_null_polls"] = 0
+        control["telemetry_lost"] = False
+        if control.get("phase") == "telemetry_lost":
+            control["phase"] = "normal"
+        return
+
+    n = int(control.get("consecutive_null_polls") or 0) + 1
+    control["consecutive_null_polls"] = n
+    if n >= 3:
+        control["telemetry_lost"] = True
+        control["phase"] = "telemetry_lost"
+        control["note"] = (
+            "usage API returned no 5h percent — guard is blind; "
+            "check Desktop usage or run usage-guard doctor"
+        )
 
 
 def merge_done(existing: list[Any] | None, new_items: list[Any] | None) -> list[Any]:

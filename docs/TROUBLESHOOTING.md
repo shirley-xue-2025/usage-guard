@@ -34,7 +34,7 @@ Compare `usage-guard poll` with Claude Desktop → Settings → Usage. Small dif
 
 `doctor` shows `⚠ connected but five_hour percent is null`. The daemon stays fail-open (`RUN`) but **cannot pause at 90%**. Common causes: expired OAuth token (`claude login`), API outage, or account type edge case.
 
-After 3 null polls, control.json sets `telemetry_lost: true` and `phase: telemetry_lost`. Check Desktop usage manually until `poll` shows a real percent. Try `cu --json` fallback after installing [ai-usage-monitors](https://github.com/minhvoio/ai-usage-monitors).
+After 3 null polls, control.json sets `telemetry_lost: true` and `phase: telemetry_lost`, and you get a **one-time macOS notification** to run `claude login` or `usage-guard doctor`. Check Desktop usage manually until `poll` shows a real percent. Try `cu --json` fallback after installing [ai-usage-monitors](https://github.com/minhvoio/ai-usage-monitors).
 
 ## `/loop` and long cooldowns
 

@@ -106,14 +106,17 @@ def test_checkpoint_session_id_prefers_sitting():
 
 def test_apply_telemetry_health_marks_lost_after_three_nulls():
     control: dict = {"consecutive_null_polls": 0, "phase": "normal"}
-    apply_telemetry_health(control, None)
-    apply_telemetry_health(control, None)
+    assert apply_telemetry_health(control, None) is False
+    assert apply_telemetry_health(control, None) is False
     assert control.get("telemetry_lost") is not True
-    apply_telemetry_health(control, None)
+    assert apply_telemetry_health(control, None) is True
     assert control["telemetry_lost"] is True
     assert control["phase"] == "telemetry_lost"
+    assert control["telemetry_lost_notified"] is True
+    assert apply_telemetry_health(control, None) is False
     apply_telemetry_health(control, 42.0)
     assert control["telemetry_lost"] is False
+    assert control["telemetry_lost_notified"] is False
 
 
 def test_apply_wait_schedule_run_clears_sleep_until():

@@ -31,6 +31,7 @@ def default_control(session_id: str | None = None) -> dict:
         "daemon_next_poll_at": None,
         "consecutive_null_polls": 0,
         "telemetry_lost": False,
+        "telemetry_lost_notified": False,
         "session_check_seconds": 600,
         "phase": "idle",
         "warned_at_85": False,
@@ -267,14 +268,18 @@ def apply_wait_schedule(control: dict, *, margin: int = 60) -> dict:
     return control
 
 
-def apply_telemetry_health(control: dict, percent: float | None) -> None:
-    """Track blind polls when the usage API returns null percent."""
+def apply_telemetry_health(control: dict, percent: float | None) -> bool:
+    """Track blind polls when the usage API returns null percent.
+
+    Returns True when telemetry is newly lost and a user alert should fire.
+    """
     if percent is not None:
         control["consecutive_null_polls"] = 0
         control["telemetry_lost"] = False
+        control["telemetry_lost_notified"] = False
         if control.get("phase") == "telemetry_lost":
             control["phase"] = "normal"
-        return
+        return False
 
     n = int(control.get("consecutive_null_polls") or 0) + 1
     control["consecutive_null_polls"] = n
@@ -283,8 +288,12 @@ def apply_telemetry_health(control: dict, percent: float | None) -> None:
         control["phase"] = "telemetry_lost"
         control["note"] = (
             "usage API returned no 5h percent — guard is blind; "
-            "check Desktop usage or run usage-guard doctor"
+            "run claude login or usage-guard doctor"
         )
+        if not control.get("telemetry_lost_notified"):
+            control["telemetry_lost_notified"] = True
+            return True
+    return False
 
 
 def merge_done(existing: list[Any] | None, new_items: list[Any] | None) -> list[Any]:

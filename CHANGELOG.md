@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.8] - 2026-06-16
+
+### Added
+
+- **One-time macOS notification** when telemetry goes blind (3 null polls): prompts `claude login` or `usage-guard doctor`
+
 ## [0.1.7] - 2026-06-16
 
 ### Fixed
@@ -115,6 +121,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Requires `claude login` once for usage reads on Desktop-only setups
 - Uses unofficial OAuth usage endpoint (may change)
 
+[0.1.8]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.8
 [0.1.7]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.7
 [0.1.6]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.6
 [0.1.5]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.5

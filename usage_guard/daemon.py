@@ -90,7 +90,11 @@ def update_control_from_usage(
     wait = poll_interval_seconds(percent)
     if wait:
         control["daemon_next_poll_at"] = datetime.now(timezone.utc).timestamp() + wait
-    apply_telemetry_health(control, percent)
+    if apply_telemetry_health(control, percent):
+        notify(
+            "usage-guard",
+            "Blind — no 5h usage data. Run claude login or usage-guard doctor.",
+        )
     return control
 
 

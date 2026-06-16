@@ -100,7 +100,7 @@ Or flags: `checkpoint.sh --quiet --done item-id --next "next-item" --note "" --t
 
 Set **`task`** on the first checkpoint (via `/usage-guard <task>` at arm, or `checkpoint.sh --task`) so `usage-guard status` stays readable.
 
-### Multi-session arcs (brain + code session)
+### Multi-session arcs (orchestrator + worker sessions)
 
 PAUSE/RUN is **account-level** (one daemon). Checkpoints are **per `session_id`**.
 
@@ -137,18 +137,19 @@ Read control.json only at these times:
 
    Pick **one** path (in order of preference):
 
-   **A. `/loop` guard tick (preferred)** — works in brain and code sessions:
+   **A. `/loop` guard tick (preferred)** — any session type:
    ```text
    /loop Read ~/.usage-guard/control.json. If PAUSE/COOLDOWN: checkpoint if needed; sleep until sleep_until (cap 59m per iteration; chain). If RUN: continue from checkpoint next.
    ```
-   Dynamic `/loop` (no interval) uses `ScheduleWakeup` internally — that is the **only** supported use of ScheduleWakeup.
+   Dynamic `/loop` (no interval) uses `ScheduleWakeup` internally after each iteration.
 
-   **B. One-shot session cron** — if you are **not** starting `/loop`, schedule a single fire at reset:
+   **B. One-shot wake at reset** — if you are **not** starting `/loop`:
    - Natural language: `in N minutes, re-read ~/.usage-guard/control.json; if RUN continue checkpoint next; if still COOLDOWN schedule again`
    - Or `CronCreate` one-shot pinned to `five_hour_reset_local` (+ ~3 min margin)
+   - Claude may implement this via `ScheduleWakeup` or `CronCreate` — either is fine
    - Chain: if still `COOLDOWN` after fire, schedule the next check (cap 59m steps)
 
-   **C. Do not** call `ScheduleWakeup` directly outside an active dynamic `/loop` — platform docs say it is for `/loop` self-pace only; brain sessions that skip `/loop` should use A or B.
+   **C. Non-negotiable:** schedule *something* before ending the turn. Platform docs emphasize `ScheduleWakeup` for dynamic `/loop`, but it often works for one-shot waits too — **never** fall back to asking the user to ping you.
 
 6. If wake scheduling fails (cron disabled, provider lacks loop-dynamic), say so explicitly and give `five_hour_reset_local` — checkpoint is still safe for `/usage-guard resume`.
 

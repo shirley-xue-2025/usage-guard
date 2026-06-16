@@ -8,7 +8,7 @@ Arm with `/usage-guard` before long batch, subagent, or overnight work — espec
 
 ## Who is this for?
 
-- **Long Claude Code sessions** that burn the **5-hour window** quickly (batch jobs, subagents, `/loop`, brain + code multi-session arcs)
+- **Long Claude Code sessions** that burn the **5-hour window** quickly (batch jobs, subagents, `/loop`, multi-session arcs)
 - Work that starts when usage is **already high** — arm gives account-level visibility, not just this chat's view
 - **Subagent / batch** work where mid-session chat messages stay **queued**
 - You want to **pause near 90%** and avoid **extra usage wallet** charges at 100%

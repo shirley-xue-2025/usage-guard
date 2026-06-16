@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.10] - 2026-06-16
+
+### Changed
+
+- Skill: remove internal "brain session" wording; clarify ScheduleWakeup often works for one-shot COOLDOWN waits (model may use it or CronCreate)
+
 ## [0.1.9] - 2026-06-16
 
 ### Fixed
@@ -128,6 +134,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Requires `claude login` once for usage reads on Desktop-only setups
 - Uses unofficial OAuth usage endpoint (may change)
 
+[0.1.10]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.10
 [0.1.9]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.9
 [0.1.8]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.8
 [0.1.7]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.7

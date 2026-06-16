@@ -40,9 +40,8 @@ After 3 null polls, control.json sets `telemetry_lost: true` and `phase: telemet
 
 Session-scoped `/loop` and `CronCreate` tasks only fire while **Claude Code is running and idle** — closing the terminal stops them. Checkpoint is still safe; use `/usage-guard resume` after reset.
 
-- **Brain session said "ping me when reset"?** Skill violation — use `/loop` guard tick or one-shot cron, not passive wait.
-- **ScheduleWakeup outside `/loop`?** Unsupported — start dynamic `/loop` (path A) or `CronCreate` (path B).
-- **Esc pressed?** Clears pending `/loop` wakeup — re-arm the loop or schedule cron again.
+- **Session said "ping me when reset"?** Skill violation — schedule a wake (path A or B), not a passive wait.
+- **Wake didn't fire?** Session-scoped timers need Claude Code **open and idle**; closing the terminal stops them. Esc clears a pending `/loop` wakeup.
 
 ## `/loop` and long cooldowns
 

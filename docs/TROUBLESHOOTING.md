@@ -36,6 +36,14 @@ Compare `usage-guard poll` with Claude Desktop → Settings → Usage. Small dif
 
 After 3 null polls, control.json sets `telemetry_lost: true` and `phase: telemetry_lost`, and you get a **one-time macOS notification** to run `claude login` or `usage-guard doctor`. Check Desktop usage manually until `poll` shows a real percent. Try `cu --json` fallback after installing [ai-usage-monitors](https://github.com/minhvoio/ai-usage-monitors).
 
+## COOLDOWN wake-up did not fire
+
+Session-scoped `/loop` and `CronCreate` tasks only fire while **Claude Code is running and idle** — closing the terminal stops them. Checkpoint is still safe; use `/usage-guard resume` after reset.
+
+- **Brain session said "ping me when reset"?** Skill violation — use `/loop` guard tick or one-shot cron, not passive wait.
+- **ScheduleWakeup outside `/loop`?** Unsupported — start dynamic `/loop` (path A) or `CronCreate` (path B).
+- **Esc pressed?** Clears pending `/loop` wakeup — re-arm the loop or schedule cron again.
+
 ## `/loop` and long cooldowns
 
 - `/loop` minimum interval: **1 minute**; dynamic mode up to **~1 hour** per tick

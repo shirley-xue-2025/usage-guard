@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.9] - 2026-06-16
+
+### Fixed
+
+- **Skill COOLDOWN wake-ups:** align with Claude Code platform — `ScheduleWakeup` only inside dynamic `/loop`; brain sessions use `/loop` guard tick or `CronCreate` one-shot (not direct ScheduleWakeup)
+- Forbidden passive endings ("ping me when reset"); TROUBLESHOOTING for missed wake-ups
+
 ## [0.1.8] - 2026-06-16
 
 ### Added
@@ -121,6 +128,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Requires `claude login` once for usage reads on Desktop-only setups
 - Uses unofficial OAuth usage endpoint (may change)
 
+[0.1.9]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.9
 [0.1.8]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.8
 [0.1.7]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.7
 [0.1.6]: https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.1.6

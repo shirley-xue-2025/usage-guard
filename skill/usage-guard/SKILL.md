@@ -129,18 +129,28 @@ Read control.json only at these times:
 
 1. Finish the **current atomic unit** only — do not abandon mid-write.
 2. Update checkpoint with `done`, `next`, clear `note`.
-3. Tell the user: paused near 5-hour limit; macOS may notify at reset (CLI sessions won't see it — poll `control.json`).
+3. Tell the user: paused near 5-hour limit; daemon may macOS-notify at reset. **Do not** treat that as a substitute for scheduling your own wake-up below.
 4. **Do not** start new subagents, batches, or long tool chains this turn.
-5. During `COOLDOWN`, use **`sleep_until`** for wait duration — do **not** poll every 5 minutes. Cap single `/loop` sleep at 59m; chain if `sleep_until` is still in the future until `state == RUN`.
+5. During `COOLDOWN`, use **`sleep_until`** / `seconds_until_five_hour_reset` for wait duration — do **not** poll every 5 minutes.
 
-   **If using `/loop`:** delay = `session_check_seconds` or time until `sleep_until` (whichever the control file implies for this wait).
+   **Before ending this turn**, you **must** schedule a wake-up. **Forbidden:** ending with "ping me when reset", "tell me when you're back", or "message me after the window resets".
 
-   **If NOT using `/loop`** (brain/chat session with ScheduleWakeup or similar): schedule one wake-up yourself:
-   - `delaySeconds = min(3600, max(1200, seconds_until_five_hour_reset + 180))` when idle (respect prompt-cache ≥1200s)
-   - Wake prompt: re-read `control.json`; if `state == RUN`, continue from checkpoint `next`; if still `COOLDOWN`, schedule again using updated `seconds_until_five_hour_reset`
-   - Do **not** poll faster than your scheduler's cache window
+   Pick **one** path (in order of preference):
 
-6. **Schedule your own wake-up** — never end the turn with "tell me when you're back"; blocked on reset = self-scheduled poll or ScheduleWakeup.
+   **A. `/loop` guard tick (preferred)** — works in brain and code sessions:
+   ```text
+   /loop Read ~/.usage-guard/control.json. If PAUSE/COOLDOWN: checkpoint if needed; sleep until sleep_until (cap 59m per iteration; chain). If RUN: continue from checkpoint next.
+   ```
+   Dynamic `/loop` (no interval) uses `ScheduleWakeup` internally — that is the **only** supported use of ScheduleWakeup.
+
+   **B. One-shot session cron** — if you are **not** starting `/loop`, schedule a single fire at reset:
+   - Natural language: `in N minutes, re-read ~/.usage-guard/control.json; if RUN continue checkpoint next; if still COOLDOWN schedule again`
+   - Or `CronCreate` one-shot pinned to `five_hour_reset_local` (+ ~3 min margin)
+   - Chain: if still `COOLDOWN` after fire, schedule the next check (cap 59m steps)
+
+   **C. Do not** call `ScheduleWakeup` directly outside an active dynamic `/loop` — platform docs say it is for `/loop` self-pace only; brain sessions that skip `/loop` should use A or B.
+
+6. If wake scheduling fails (cron disabled, provider lacks loop-dynamic), say so explicitly and give `five_hour_reset_local` — checkpoint is still safe for `/usage-guard resume`.
 
 ### On `state == RUN` with existing checkpoint
 

@@ -136,38 +136,33 @@ Optional `~/.usage-guard/config.json`:
 
 **Weekly limit (opt-in):** set `"weekly_enabled": true` to PAUSE when the account **weekly** utilization (Desktop → Settings → Usage → **"All models"**) reaches `weekly_threshold_pause` (default 98%), even if the 5-hour window is still low. Either limit can trigger PAUSE; both must clear before RUN resumes. Set `weekly_pause_within_hours` (e.g. `5`) so weekly only pauses when the weekly reset is that soon — if weekly is 99% but reset is days away, you stay `RUN` (5h guard still applies). Omit or set `null` to pause at threshold regardless of reset time. The OAuth API exposes one weekly number (`seven_day`) — not per-model Sonnet/Opus bars separately.
 
-### Example screenshot — weekly COOLDOWN while 5h is safe
+### Example — dogfood session (screenshots)
 
-The block below is a **real dogfood session** (Claude Code UI), not part of this README. Weekly monitoring was enabled; the 5-hour window had just reset (**4%**) but weekly was **99%**, so the guard entered `COOLDOWN` (`pause_reason: weekly`).
+> **These images are from a real Claude Code session**, not part of this README.
 
-<table>
-<tr><td>
+Config in use: `weekly_enabled: true`, `weekly_threshold_pause: 98`, `weekly_pause_within_hours: 5`.
 
-**Dogfood screenshot** · v0.2.1 · `weekly_enabled: true`, `weekly_pause_within_hours: 5`
+**What happened:** the 5-hour window had just reset (**4%**). Weekly was **99%**, so the guard entered `COOLDOWN` with `pause_reason: weekly` — the agent stopped dispatching new subagents even though the session window looked safe.
 
-<img src="docs/assets/weekly-cooldown-dogfood-example.png" alt="Claude Code session: agent reports COOLDOWN because weekly is at 99% while the 5-hour window shows 4%" width="640" />
+![Config snippet from the dogfood session](docs/assets/weekly-config-dogfood-example.png)
 
-*Caption: Without weekly monitoring, the agent would have kept dispatching subagents into a nearly exhausted weekly cap.*
-
-</td></tr>
-</table>
+![Agent reads weekly COOLDOWN while the 5-hour window is at 4%](docs/assets/weekly-cooldown-dogfood-example.png)
 
 <details>
-<summary>Text from screenshot (for accessibility / search)</summary>
+<summary>Transcript (accessibility)</summary>
 
 ```text
-Config: weekly_threshold_pause 98, weekly_pause_within_hours 5
+Forced re-arm daemon to enable weekly polling
 
-Agent: phase cooldown even though 5h window just reset (4%, fresh) —
-       weekly is now what's gating us.
+The force re-arm shows phase: cooldown even though the 5h window just
+reset (4%, fresh) — weekly is now what's gating us.
 
-Agent: weekly limit at 99% (over 98% pause threshold) → COOLDOWN
-       (pause_reason: weekly) while 5-hour window is fresh (4%).
-       Without weekly monitoring I'd have kept dispatching subagents
-       straight into the weekly cap.
+That's exactly why watching weekly mattered — the weekly limit is at 99%
+(over the 98% pause threshold), so the guard went to COOLDOWN
+(pause_reason: weekly) even though the 5-hour window is fresh (4%).
+Without weekly monitoring I'd have kept dispatching subagents straight
+into the weekly cap.
 ```
-<img width="1088" height="374" alt="image" src="https://github.com/user-attachments/assets/3d9c5f2a-3d73-4980-addd-be1a9d47aa23" />
-
 
 </details>
 

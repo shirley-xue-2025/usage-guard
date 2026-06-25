@@ -4,7 +4,11 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [0.2.0] - 2026-06-25
+
+### Added
+
+- **Weekly limit monitoring (opt-in):** `weekly_enabled` in `~/.usage-guard/config.json` — PAUSE at `weekly_threshold_pause` (default 98%) in addition to the 5-hour window (default 90%). Either limit triggers PAUSE; resume when both are clear. `pause_reason`, `weekly_percent`, and weekly reset timing in control.json, status, poll, and doctor.
 
 ### Fixed
 

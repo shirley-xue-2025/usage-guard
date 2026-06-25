@@ -293,7 +293,18 @@ def cmd_status(_: argparse.Namespace) -> int:
     if control.get("telemetry_lost"):
         print("alert:   telemetry_lost — API returned no 5h %; do not trust RUN for heavy work")
     print(f"state:   {control.get('state')} ({control.get('phase')})")
+    if control.get("pause_reason"):
+        print(f"limit:   paused for {control.get('pause_reason')}")
     print(f"5h:      {control.get('five_hour_percent')}%")
+    weekly = control.get("weekly_percent")
+    if weekly is not None:
+        weekly_local = control.get("weekly_reset_local")
+        weekly_in = control.get("seconds_until_weekly_reset")
+        line = f"weekly:  {weekly}%"
+        if weekly_local and weekly_in is not None:
+            when = f"in {weekly_in // 60}m" if weekly_in > 0 else "passed"
+            line += f"  ({weekly_local}, {when})"
+        print(line)
     extra = format_extra_usage(
         {
             "extraEnabled": control.get("extra_enabled"),

@@ -121,9 +121,14 @@ Optional `~/.usage-guard/config.json`:
 {
   "threshold_pause": 90,
   "threshold_warn": 85,
+  "weekly_enabled": false,
+  "weekly_threshold_pause": 98,
+  "weekly_threshold_warn": 95,
   "cooldown_margin_seconds": 60
 }
 ```
+
+**Weekly limit (opt-in):** set `"weekly_enabled": true` to PAUSE when the account **weekly** utilization (Desktop → Settings → Usage → "All models") reaches `weekly_threshold_pause` (default 98%), even if the 5-hour window is still low. Either limit can trigger PAUSE; both must clear before RUN resumes. The OAuth API exposes one weekly number (`seven_day`) — not per-model Sonnet/Opus bars separately.
 
 ## Honest limits
 

@@ -13,12 +13,19 @@ from usage_guard.control import (
     apply_usage_telemetry,
     apply_wait_schedule,
     apply_telemetry_health,
+    can_resume,
     default_control,
+    effective_poll_percent,
     ensure_dirs,
+    limit_hits,
+    limits_config,
     load_config,
     now_iso,
+    pause_note,
+    pause_reason_from_hits,
     poll_interval_seconds,
     read_control,
+    resume_at_for_pause,
     seconds_until_reset,
     write_control,
 )
@@ -37,60 +44,111 @@ def log(msg: str) -> None:
         pass
 
 
+def _notify_pause(control: dict, config: dict, reason: str | None) -> None:
+    limits = limits_config(config)
+    fh = control.get("five_hour_percent")
+    wk = control.get("weekly_percent")
+    if reason == "weekly":
+        notify(
+            "usage-guard",
+            f"PAUSE at {wk:.0f}% weekly — finish current unit, do not start new subagents.",
+        )
+    elif reason == "both":
+        notify(
+            "usage-guard",
+            f"PAUSE at {fh:.0f}% 5h and {wk:.0f}% weekly — finish unit, no new subagents.",
+        )
+    else:
+        notify(
+            "usage-guard",
+            f"PAUSE at {fh:.0f}% — finish current unit, do not start new subagents.",
+        )
+
+
+def _notify_resume(control: dict, config: dict) -> None:
+    limits = limits_config(config)
+    parts: list[str] = []
+    fh = control.get("five_hour_percent")
+    wk = control.get("weekly_percent")
+    if fh is not None:
+        parts.append(f"5h {fh:.0f}%")
+    if limits["weekly_enabled"] and wk is not None:
+        parts.append(f"weekly {wk:.0f}%")
+    summary = ", ".join(parts) if parts else "limits clear"
+    notify("usage-guard", f"RUN again ({summary}) — you may resume work.")
+
+
 def update_control_from_usage(
     control: dict,
     usage: dict,
     *,
     config: dict,
 ) -> dict:
-    threshold = config["threshold_pause"]
-    warn_threshold = config["threshold_warn"]
+    limits = limits_config(config)
 
     apply_usage_telemetry(control, usage)
-    percent = control.get("five_hour_percent")
-    resets_at = control.get("five_hour_resets_at")
+    fh = control.get("five_hour_percent")
+    hits = limit_hits(control, config)
+    reason = pause_reason_from_hits(hits)
 
-    if percent is not None and percent >= threshold:
+    if hits["any"]:
         if control.get("state") != "COOLDOWN":
+            entering_pause = control.get("state") not in {"PAUSE", "COOLDOWN"}
             control["state"] = "PAUSE"
             control["phase"] = "pause"
-            control["resume_at"] = resets_at
-            control["note"] = f"five_hour >= {threshold}%"
-            notify(
-                "usage-guard",
-                f"PAUSE at {percent:.0f}% — finish current unit, do not start new subagents.",
-            )
-    elif control.get("state") == "PAUSE" and percent is not None and percent < threshold:
+            control["pause_reason"] = reason
+            control["resume_at"] = resume_at_for_pause(control, hits)
+            control["note"] = pause_note(reason, control, config)
+            if entering_pause:
+                _notify_pause(control, config, reason)
+    elif control.get("state") == "PAUSE" and can_resume(control, config):
         control["state"] = "RUN"
         control["phase"] = "normal"
         control["resume_at"] = None
+        control["pause_reason"] = None
         control["last_reset_at"] = now_iso()
         control["note"] = "usage dropped below threshold"
-        notify("usage-guard", f"RUN again at {percent:.0f}% — you may resume work.")
-    elif control.get("state") not in {"PAUSE", "COOLDOWN"} and percent is not None:
+        _notify_resume(control, config)
+    elif control.get("state") not in {"PAUSE", "COOLDOWN"} and can_resume(control, config):
         control["state"] = "RUN"
         control["phase"] = "normal"
         control["resume_at"] = None
+        control["pause_reason"] = None
         control["note"] = ""
 
     if (
-        percent is not None
-        and percent >= warn_threshold
-        and percent < threshold
+        fh is not None
+        and fh >= limits["five_hour_warn"]
+        and fh < limits["five_hour_pause"]
         and not control.get("warned_at_85")
     ):
         control["warned_at_85"] = True
         notify(
             "usage-guard",
-            f"Warning: {percent:.0f}% of 5-hour window — avoid starting long subagent batches.",
+            f"Warning: {fh:.0f}% of 5-hour window — avoid starting long subagent batches.",
         )
 
-    apply_wait_schedule(control, margin=config["cooldown_margin_seconds"])
+    wk = control.get("weekly_percent")
+    if (
+        limits["weekly_enabled"]
+        and wk is not None
+        and wk >= limits["weekly_warn"]
+        and wk < limits["weekly_pause"]
+        and not control.get("warned_at_weekly")
+    ):
+        control["warned_at_weekly"] = True
+        notify(
+            "usage-guard",
+            f"Warning: {wk:.0f}% of weekly limit — avoid starting long subagent batches.",
+        )
 
-    wait = poll_interval_seconds(percent)
+    apply_wait_schedule(control, margin=config["cooldown_margin_seconds"], config=config)
+
+    effective = effective_poll_percent(control, config)
+    wait = poll_interval_seconds(effective)
     if wait:
         control["daemon_next_poll_at"] = datetime.now(timezone.utc).timestamp() + wait
-    if apply_telemetry_health(control, percent):
+    if apply_telemetry_health(control, fh):
         notify(
             "usage-guard",
             "Blind — no 5h usage data. Run claude login or usage-guard doctor.",
@@ -120,7 +178,9 @@ def run_daemon(session_id: str, *, mock_percent: float | None = None) -> int:
 
         if control.get("state") == "COOLDOWN":
             sleep_for = seconds_until_reset(
-                control.get("resume_at") or control.get("five_hour_resets_at"),
+                control.get("resume_at")
+                or control.get("five_hour_resets_at")
+                or control.get("weekly_resets_at"),
                 config["cooldown_margin_seconds"],
             )
             if sleep_for is None:
@@ -130,15 +190,26 @@ def run_daemon(session_id: str, *, mock_percent: float | None = None) -> int:
             try:
                 usage = get_usage(mock_percent=mock_percent)
                 control = update_control_from_usage(control, usage, config=config)
-                if control.get("state") != "COOLDOWN":
-                    write_control(control)
-                else:
+                if control.get("state") == "PAUSE":
+                    control["state"] = "COOLDOWN"
+                    control["phase"] = "cooldown"
+                    apply_wait_schedule(
+                        control,
+                        margin=config["cooldown_margin_seconds"],
+                        config=config,
+                    )
+                elif can_resume(control, config):
                     control["state"] = "RUN"
                     control["phase"] = "normal"
                     control["last_reset_at"] = now_iso()
                     control["note"] = "cooldown complete"
-                    write_control(control)
-                    notify("usage-guard", "5-hour window reset — run /usage-guard resume if needed.")
+                    control["pause_reason"] = None
+                    control["resume_at"] = None
+                    notify(
+                        "usage-guard",
+                        "Usage window reset — run /usage-guard resume if needed.",
+                    )
+                write_control(control)
             except UsageFetchError as exc:
                 log(f"cooldown usage error: {exc}")
             continue
@@ -149,12 +220,19 @@ def run_daemon(session_id: str, *, mock_percent: float | None = None) -> int:
             if control.get("state") == "PAUSE":
                 control["state"] = "COOLDOWN"
                 control["phase"] = "cooldown"
-                apply_wait_schedule(control, margin=config["cooldown_margin_seconds"])
+                apply_wait_schedule(
+                    control,
+                    margin=config["cooldown_margin_seconds"],
+                    config=config,
+                )
             write_control(control)
             extra_used = usage.get("extraUsedCredits")
             extra_note = f" extra_used={extra_used}" if extra_used is not None else ""
+            weekly = usage.get("weeklyPercent")
+            weekly_note = f" weekly={weekly}" if weekly is not None else ""
             log(
-                f"poll percent={usage.get('fiveHourPercent')} state={control.get('state')}{extra_note}"
+                f"poll percent={usage.get('fiveHourPercent')}{weekly_note} "
+                f"state={control.get('state')}{extra_note}"
             )
         except UsageFetchError as exc:
             log(f"poll error (fail-open, keep prior control): {exc}")
@@ -163,7 +241,7 @@ def run_daemon(session_id: str, *, mock_percent: float | None = None) -> int:
         if control.get("state") == "COOLDOWN":
             continue
 
-        wait = poll_interval_seconds(control.get("five_hour_percent"))
+        wait = poll_interval_seconds(effective_poll_percent(control, config))
         if wait <= 0:
             wait = 60
         time.sleep(wait)

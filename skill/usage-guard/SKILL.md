@@ -54,6 +54,7 @@ Read `~/.usage-guard/control.json` once and confirm:
 - `phase` is `normal` (or `five_hour_percent` is set) — **not** stuck on `waiting_first_poll` without a live daemon
 - If arm JSON output includes `"warning"`, tell the user the prior guard was not active and this is a fresh arm
 - Report go/no-go using arm JSON: `five_hour_percent`, `five_hour_reset_local`, `seconds_until_five_hour_reset`, `state` — **not** raw UTC strings
+- If `weekly_percent` is present (weekly monitoring enabled in config), also report weekly % and `weekly_reset_local` / `seconds_until_weekly_reset`. **Weekly can trigger PAUSE even when 5h looks safe.**
 - If present in control.json, also report **extra usage wallet**: `extra_used_credits`, `extra_monthly_limit`, `extra_utilization`, `extra_currency` (amounts are in cents; `usage-guard status` formats them), or run `usage-guard poll` for a live snapshot
 
 **If arm JSON has `"already_armed": true`** (daemon from a prior sitting):
@@ -77,11 +78,13 @@ You are now **usage-guard armed**. Follow this for the rest of this session:
 
 - Path: `~/.usage-guard/control.json`
 - Obey **`state` only**: `RUN` = continue, `PAUSE` or `COOLDOWN` = stop dispatching new work.
+- **Either limit can pause:** account **5-hour window** (default 90%) **or** **weekly limit** (opt-in, default 98%) — check `pause_reason` (`five_hour`, `weekly`, or `both`) in control.json.
 - **Exception — `telemetry_lost: true`:** usage API returned no 5h percent for several polls. Guard is **blind** — do **not** start heavy or long work; tell user to run `claude login` or `usage-guard doctor` (they may get a macOS notification). `state` may still say `RUN`.
 - **Never** decide pause/continue from `five_hour_percent` yourself.
 - **Never compare timestamps yourself** (`five_hour_resets_at`, `sleep_until`, etc.). UTC trips up models. Use precomputed fields only:
   - `seconds_until_five_hour_reset` — positive = reset not yet; negative or `five_hour_reset_pending: false` = reset time passed
   - `five_hour_reset_local` — for user-facing reports (local timezone, not UTC)
+  - `weekly_percent`, `weekly_reset_local`, `seconds_until_weekly_reset` — when weekly monitoring is enabled (OAuth `seven_day` = Desktop "All models" weekly bar)
   - If `state` is **`RUN`**, continue — **do not** call percent "stale" because a UTC clock comparison looked past. Wrong timezone math caused false "reset already passed" bugs.
 - **Post-reset poll lag:** `five_hour_reset_pending: false` + non-null `five_hour_percent` (e.g. 88% with reset time an hour ago) means the **old window's percent** until the daemon re-polls — not a reason to pause. Check `awaiting_post_reset_poll` and `percent_note`; trust **`state`**. Expect correction at `daemon_next_poll_at` / `daemon_next_poll_local`.
 - After a **window reset**, `five_hour_percent` may be `null` until the daemon's next poll. If `state` is `RUN`, trust `state` (check `last_reset_at` if present) — do not wait for the user to return.
@@ -130,7 +133,7 @@ Read control.json only at these times:
 
 1. Finish the **current atomic unit** only — do not abandon mid-write.
 2. Update checkpoint with `done`, `next`, clear `note`.
-3. Tell the user: paused near 5-hour limit; daemon may macOS-notify at reset. **Do not** treat that as a substitute for scheduling your own wake-up below.
+3. Tell the user: paused near usage limit (`pause_reason`); daemon may macOS-notify at reset. **Do not** treat that as a substitute for scheduling your own wake-up below.
 4. **Do not** start new subagents, batches, or long tool chains this turn.
 5. During `COOLDOWN`, use **`sleep_until`** / `seconds_until_five_hour_reset` for wait duration — do **not** poll every 5 minutes.
 
@@ -169,6 +172,7 @@ Continue from `next` in checkpoint; skip items in `done`.
 At session end (or before a long pause), tell the user:
 
 - **5h window now:** `five_hour_percent`, `five_hour_reset_local`, `state`
+- **Weekly limit** (if enabled): `weekly_percent`, `weekly_reset_local`, `pause_reason`
 - **Extra usage wallet** (if enabled): `extra_used_credits` / `extra_monthly_limit` / `extra_utilization` from control.json, or `usage-guard status` for formatted amounts
 - **Delta this sitting** if you recorded percent at arm/join (e.g. "4% → 41% this session")
 - This is the most useful user-facing summary — report it even without subagents

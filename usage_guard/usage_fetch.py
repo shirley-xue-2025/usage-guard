@@ -362,6 +362,11 @@ def doctor() -> int:
         print(f"✓ Usage API: five_hour={pct}%")
         if usage.get("fiveHourResetsAt"):
             print(f"  resets at: {usage['fiveHourResetsAt']}")
+        weekly = usage.get("weeklyPercent")
+        if weekly is not None:
+            print(f"  weekly: {weekly}%")
+            if usage.get("weeklyResetsAt"):
+                print(f"  weekly resets at: {usage['weeklyResetsAt']}")
         extra = format_extra_usage(usage)
         if extra:
             print(f"  extra usage: {extra}")

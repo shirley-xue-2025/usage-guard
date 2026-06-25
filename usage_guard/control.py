@@ -23,6 +23,9 @@ def default_control(session_id: str | None = None) -> dict:
         "state": "IDLE",
         "five_hour_percent": None,
         "five_hour_resets_at": None,
+        "weekly_percent": None,
+        "weekly_resets_at": None,
+        "pause_reason": None,
         "extra_enabled": None,
         "extra_used_credits": None,
         "extra_monthly_limit": None,
@@ -40,6 +43,7 @@ def default_control(session_id: str | None = None) -> dict:
         "session_check_seconds": 600,
         "phase": "idle",
         "warned_at_85": False,
+        "warned_at_weekly": False,
         "updated_at": now_iso(),
         "session_id": session_id,
         "note": "",
@@ -124,6 +128,9 @@ def load_config() -> dict:
     defaults = {
         "threshold_pause": 90,
         "threshold_warn": 85,
+        "weekly_enabled": False,
+        "weekly_threshold_pause": 98,
+        "weekly_threshold_warn": 95,
         "cooldown_margin_seconds": 60,
     }
     from usage_guard.paths import CONFIG_PATH
@@ -132,6 +139,101 @@ def load_config() -> dict:
     if isinstance(data, dict):
         defaults.update(data)
     return defaults
+
+
+def limits_config(config: dict) -> dict:
+    """Normalized limit thresholds from config.json."""
+    return {
+        "five_hour_pause": config.get("threshold_pause", 90),
+        "five_hour_warn": config.get("threshold_warn", 85),
+        "weekly_enabled": bool(config.get("weekly_enabled", False)),
+        "weekly_pause": config.get("weekly_threshold_pause", 98),
+        "weekly_warn": config.get("weekly_threshold_warn", 95),
+    }
+
+
+def effective_poll_percent(control: dict, config: dict) -> float | None:
+    """Highest relevant utilization — drives poll cadence when weekly is enabled."""
+    limits = limits_config(config)
+    values: list[float] = []
+    fh = control.get("five_hour_percent")
+    if fh is not None:
+        values.append(float(fh))
+    if limits["weekly_enabled"]:
+        wk = control.get("weekly_percent")
+        if wk is not None:
+            values.append(float(wk))
+    return max(values) if values else None
+
+
+def limit_hits(control: dict, config: dict) -> dict[str, bool]:
+    limits = limits_config(config)
+    fh = control.get("five_hour_percent")
+    wk = control.get("weekly_percent")
+    five_hour = fh is not None and fh >= limits["five_hour_pause"]
+    weekly = (
+        limits["weekly_enabled"]
+        and wk is not None
+        and wk >= limits["weekly_pause"]
+    )
+    return {"five_hour": five_hour, "weekly": weekly, "any": five_hour or weekly}
+
+
+def pause_reason_from_hits(hits: dict[str, bool]) -> str | None:
+    if hits.get("five_hour") and hits.get("weekly"):
+        return "both"
+    if hits.get("five_hour"):
+        return "five_hour"
+    if hits.get("weekly"):
+        return "weekly"
+    return None
+
+
+def can_resume(control: dict, config: dict) -> bool:
+    """True when no active limit is at or above its pause threshold."""
+    limits = limits_config(config)
+    fh = control.get("five_hour_percent")
+    if fh is not None and fh >= limits["five_hour_pause"]:
+        return False
+    if limits["weekly_enabled"]:
+        wk = control.get("weekly_percent")
+        if wk is not None and wk >= limits["weekly_pause"]:
+            return False
+    return True
+
+
+def resume_at_for_pause(control: dict, hits: dict[str, bool]) -> str | None:
+    """Reset timestamp to wait for when entering PAUSE/COOLDOWN."""
+    candidates: list[str] = []
+    if hits.get("five_hour"):
+        value = control.get("five_hour_resets_at")
+        if value:
+            candidates.append(value)
+    if hits.get("weekly"):
+        value = control.get("weekly_resets_at")
+        if value:
+            candidates.append(value)
+    if not candidates:
+        return control.get("five_hour_resets_at") or control.get("weekly_resets_at")
+    if len(candidates) == 1:
+        return candidates[0]
+    # Both limits over — wait until the later reset, then re-poll.
+    parsed = [(c, parse_reset_at(c)) for c in candidates]
+    parsed = [(c, dt) for c, dt in parsed if dt is not None]
+    if not parsed:
+        return candidates[0]
+    return max(parsed, key=lambda item: item[1])[0]
+
+
+def pause_note(reason: str | None, control: dict, config: dict) -> str:
+    limits = limits_config(config)
+    fh = control.get("five_hour_percent")
+    wk = control.get("weekly_percent")
+    if reason == "both":
+        return f"five_hour >= {limits['five_hour_pause']}% and weekly >= {limits['weekly_pause']}%"
+    if reason == "weekly":
+        return f"weekly >= {limits['weekly_pause']}% ({wk:.0f}%)" if wk is not None else "weekly limit"
+    return f"five_hour >= {limits['five_hour_pause']}% ({fh:.0f}%)" if fh is not None else "five_hour limit"
 
 
 def poll_interval_seconds(percent: float | None) -> int:
@@ -214,6 +316,22 @@ def enrich_time_fields(control: dict) -> dict:
         if local:
             control["resume_at_local"] = local
 
+    resume_at = control.get("resume_at")
+    if resume_at:
+        local = format_local_time(resume_at)
+        if local:
+            control["resume_at_local"] = local
+
+    weekly_resets_at = control.get("weekly_resets_at")
+    if weekly_resets_at:
+        sec = seconds_until_timestamp(weekly_resets_at, margin=0)
+        if sec is not None:
+            control["seconds_until_weekly_reset"] = sec
+            control["weekly_reset_pending"] = sec > 0
+        local = format_local_time(weekly_resets_at)
+        if local:
+            control["weekly_reset_local"] = local
+
     pending = control.get("five_hour_reset_pending")
     percent = control.get("five_hour_percent")
     if (
@@ -258,6 +376,8 @@ def apply_usage_telemetry(control: dict, usage: dict) -> None:
     """Copy account usage fields from a get_usage() payload into control.json."""
     control["five_hour_percent"] = usage.get("fiveHourPercent")
     control["five_hour_resets_at"] = usage.get("fiveHourResetsAt")
+    control["weekly_percent"] = usage.get("weeklyPercent")
+    control["weekly_resets_at"] = usage.get("weeklyResetsAt")
     control["extra_enabled"] = usage.get("extraEnabled")
     control["extra_used_credits"] = usage.get("extraUsedCredits")
     control["extra_monthly_limit"] = usage.get("extraMonthlyLimit")
@@ -265,12 +385,15 @@ def apply_usage_telemetry(control: dict, usage: dict) -> None:
     control["extra_currency"] = usage.get("extraCurrency")
 
 
-def apply_wait_schedule(control: dict, *, margin: int = 60) -> dict:
+def apply_wait_schedule(
+    control: dict, *, margin: int = 60, config: dict | None = None
+) -> dict:
     """Set session_check_seconds and sleep_until for PAUSE/COOLDOWN waits."""
     state = control.get("state", "RUN")
-    percent = control.get("five_hour_percent")
+    if config is None:
+        config = load_config()
+    percent = effective_poll_percent(control, config)
     resets_at = control.get("resume_at") or control.get("five_hour_resets_at")
-
     if state in {"PAUSE", "COOLDOWN"} and resets_at:
         remaining = seconds_until_reset(resets_at, margin)
         if remaining is not None and remaining > 0:

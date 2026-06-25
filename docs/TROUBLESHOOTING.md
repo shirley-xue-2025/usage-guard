@@ -21,6 +21,8 @@ usage-guard doctor
 
 **Note:** `git pull` does not refresh the wrapper — run `./install.sh` after pulls (see README Updating).
 
+**Weekly monitoring:** enable in `~/.usage-guard/config.json` with `"weekly_enabled": true`. Matches Desktop "All models" weekly bar, not per-model Sonnet limits.
+
 ---
 
 ## `/usage-guard` not in slash command picker

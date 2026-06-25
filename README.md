@@ -146,6 +146,8 @@ Example — weekly nearly full, session still comfortable:
   "weekly_pause_within_hours": 5
 }
 ```
+<img width="1088" height="374" alt="image" src="https://github.com/user-attachments/assets/3d9c5f2a-3d73-4980-addd-be1a9d47aa23" />
+
 
 ## Honest limits
 

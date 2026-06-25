@@ -216,6 +216,15 @@ def clamp_pct(value: Any) -> float | None:
         return None
 
 
+def _money_cents(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def parse_usage(raw: dict) -> dict:
     fh = raw.get("five_hour") or {}
     sd = raw.get("seven_day") or {}
@@ -226,8 +235,46 @@ def parse_usage(raw: dict) -> dict:
         "weeklyPercent": clamp_pct(sd.get("utilization")),
         "weeklyResetsAt": sd.get("resets_at"),
         "extraEnabled": ex.get("is_enabled"),
-        "extraUsedCredits": ex.get("used_credits"),
+        "extraUsedCredits": _money_cents(ex.get("used_credits")),
+        "extraMonthlyLimit": _money_cents(ex.get("monthly_limit")),
+        "extraUtilization": clamp_pct(ex.get("utilization")),
+        "extraCurrency": ex.get("currency"),
     }
+
+
+def format_extra_usage(usage: dict) -> str | None:
+    """Human-readable extra usage wallet summary (amounts in API cents)."""
+    enabled = usage.get("extraEnabled")
+    if enabled is False:
+        return "disabled"
+    used = usage.get("extraUsedCredits")
+    limit = usage.get("extraMonthlyLimit")
+    utilization = usage.get("extraUtilization")
+    if enabled is None and used is None and limit is None and utilization is None:
+        return None
+
+    currency = usage.get("extraCurrency") or "USD"
+    symbol = {"USD": "$", "EUR": "€", "GBP": "£"}.get(currency, f"{currency} ")
+
+    def amount(cents: float | None) -> str | None:
+        if cents is None:
+            return None
+        return f"{symbol}{cents / 100:.2f}"
+
+    parts: list[str] = []
+    used_s = amount(used)
+    limit_s = amount(limit)
+    if used_s and limit_s:
+        parts.append(f"{used_s} / {limit_s}")
+    elif used_s:
+        parts.append(f"{used_s} used")
+    elif limit_s:
+        parts.append(f"{limit_s} limit")
+    if utilization is not None:
+        parts.append(f"{utilization:.1f}%")
+    if not parts:
+        return "enabled (no usage yet)"
+    return ", ".join(parts)
 
 
 def fetch_usage_via_cu() -> dict:
@@ -252,6 +299,9 @@ def get_usage(*, mock_percent: float | None = None) -> dict:
             "weeklyResetsAt": None,
             "extraEnabled": None,
             "extraUsedCredits": None,
+            "extraMonthlyLimit": None,
+            "extraUtilization": None,
+            "extraCurrency": None,
             "source": "mock",
         }
 
@@ -312,6 +362,9 @@ def doctor() -> int:
         print(f"✓ Usage API: five_hour={pct}%")
         if usage.get("fiveHourResetsAt"):
             print(f"  resets at: {usage['fiveHourResetsAt']}")
+        extra = format_extra_usage(usage)
+        if extra:
+            print(f"  extra usage: {extra}")
         return 0
     except UsageFetchError as exc:
         print(f"✗ Usage API: {exc}")

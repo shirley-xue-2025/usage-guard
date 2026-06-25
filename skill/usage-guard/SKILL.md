@@ -54,6 +54,7 @@ Read `~/.usage-guard/control.json` once and confirm:
 - `phase` is `normal` (or `five_hour_percent` is set) — **not** stuck on `waiting_first_poll` without a live daemon
 - If arm JSON output includes `"warning"`, tell the user the prior guard was not active and this is a fresh arm
 - Report go/no-go using arm JSON: `five_hour_percent`, `five_hour_reset_local`, `seconds_until_five_hour_reset`, `state` — **not** raw UTC strings
+- If present in control.json, also report **extra usage wallet**: `extra_used_credits`, `extra_monthly_limit`, `extra_utilization`, `extra_currency` (amounts are in cents; `usage-guard status` formats them), or run `usage-guard poll` for a live snapshot
 
 **If arm JSON has `"already_armed": true`** (daemon from a prior sitting):
 
@@ -168,6 +169,7 @@ Continue from `next` in checkpoint; skip items in `done`.
 At session end (or before a long pause), tell the user:
 
 - **5h window now:** `five_hour_percent`, `five_hour_reset_local`, `state`
+- **Extra usage wallet** (if enabled): `extra_used_credits` / `extra_monthly_limit` / `extra_utilization` from control.json, or `usage-guard status` for formatted amounts
 - **Delta this sitting** if you recorded percent at arm/join (e.g. "4% → 41% this session")
 - This is the most useful user-facing summary — report it even without subagents
 

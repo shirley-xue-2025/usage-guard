@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Install path resilience:** CLI wrapper checks the clone still exists before import; skill scripts resolve `~/.local/bin/usage-guard` even when `PATH` omits it; `install.sh` writes `~/.usage-guard/repo-root` as a fallback anchor
+
 ## [0.1.10] - 2026-06-16
 
 ### Changed

@@ -17,12 +17,20 @@ chmod +x "${SKILL_DEST}/scripts/"*.sh
 mkdir -p "${BIN_DIR}"
 cat > "${WRAPPER}" <<EOF
 #!/usr/bin/env bash
-export PYTHONPATH="${REPO_ROOT}:\${PYTHONPATH:-}"
+REPO_ROOT="${REPO_ROOT}"
+if [ ! -d "\${REPO_ROOT}/usage_guard" ]; then
+  echo "usage-guard: clone not found at \${REPO_ROOT}" >&2
+  echo "  Install path is stale (repo moved or deleted)." >&2
+  echo "  Fix: cd <your-clone>/usage-guard && ./install.sh && usage-guard doctor" >&2
+  exit 1
+fi
+export PYTHONPATH="\${REPO_ROOT}:\${PYTHONPATH:-}"
 exec python3 -m usage_guard "\$@"
 EOF
 chmod +x "${WRAPPER}"
 
 mkdir -p "${HOME}/.usage-guard"
+printf '%s\n' "${REPO_ROOT}" > "${HOME}/.usage-guard/repo-root"
 
 case ":${PATH}:" in
   *":${BIN_DIR}:"*) ;;

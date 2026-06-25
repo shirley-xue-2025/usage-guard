@@ -23,6 +23,11 @@ def default_control(session_id: str | None = None) -> dict:
         "state": "IDLE",
         "five_hour_percent": None,
         "five_hour_resets_at": None,
+        "extra_enabled": None,
+        "extra_used_credits": None,
+        "extra_monthly_limit": None,
+        "extra_utilization": None,
+        "extra_currency": None,
         "resume_at": None,
         "sleep_until": None,
         "last_reset_at": None,
@@ -247,6 +252,17 @@ def session_check_seconds(percent: float | None, state: str) -> int:
     if percent < 85:
         return 10 * 60
     return 5 * 60
+
+
+def apply_usage_telemetry(control: dict, usage: dict) -> None:
+    """Copy account usage fields from a get_usage() payload into control.json."""
+    control["five_hour_percent"] = usage.get("fiveHourPercent")
+    control["five_hour_resets_at"] = usage.get("fiveHourResetsAt")
+    control["extra_enabled"] = usage.get("extraEnabled")
+    control["extra_used_credits"] = usage.get("extraUsedCredits")
+    control["extra_monthly_limit"] = usage.get("extraMonthlyLimit")
+    control["extra_utilization"] = usage.get("extraUtilization")
+    control["extra_currency"] = usage.get("extraCurrency")
 
 
 def apply_wait_schedule(control: dict, *, margin: int = 60) -> dict:

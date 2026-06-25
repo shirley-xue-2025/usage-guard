@@ -1,5 +1,28 @@
 # Troubleshooting
 
+## `No module named usage_guard` when arming
+
+`claude login` fixes **OAuth** only. This error means Python cannot import the `usage_guard` package — the CLI wrapper or skill fallback has a **stale or wrong `PYTHONPATH`**.
+
+**Typical cause:** repo was moved or you have a new clone, but `~/.local/bin/usage-guard` still points at an old path from a previous `./install.sh`.
+
+**What you should see after v0.1.11:** a clear message (`clone not found at …` or `Re-run ./install.sh`) instead of a raw `ModuleNotFoundError`.
+
+**Fix:**
+
+```bash
+cd usage-guard    # your current clone
+./install.sh
+export PATH="$HOME/.local/bin:$PATH"
+usage-guard doctor
+```
+
+**Verify:** `grep PYTHONPATH ~/.local/bin/usage-guard` should show your current clone's absolute path.
+
+**Note:** `git pull` does not refresh the wrapper — run `./install.sh` after pulls (see README Updating).
+
+---
+
 ## `/usage-guard` not in slash command picker
 
 The skill sets `disable-model-invocation: true` so Claude does not auto-arm sessions. On some Desktop / Fable builds it may also be **hidden from the picker** — **type `/usage-guard` manually** anyway (autocomplete optional).

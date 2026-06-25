@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from usage_guard.control import (
+    apply_usage_telemetry,
     apply_wait_schedule,
     default_checkpoint,
     default_control,
@@ -29,7 +30,7 @@ from usage_guard.control import (
 from usage_guard.daemon import stop_daemon
 from usage_guard.paths import CONTROL_PATH, GUARD_DIR, LOG_PATH, PID_PATH
 from usage_guard.update_check import check_for_update, print_update_notice
-from usage_guard.usage_fetch import UsageFetchError, doctor, get_usage
+from usage_guard.usage_fetch import UsageFetchError, doctor, format_extra_usage, get_usage
 
 
 def _python() -> str:
@@ -293,6 +294,17 @@ def cmd_status(_: argparse.Namespace) -> int:
         print("alert:   telemetry_lost — API returned no 5h %; do not trust RUN for heavy work")
     print(f"state:   {control.get('state')} ({control.get('phase')})")
     print(f"5h:      {control.get('five_hour_percent')}%")
+    extra = format_extra_usage(
+        {
+            "extraEnabled": control.get("extra_enabled"),
+            "extraUsedCredits": control.get("extra_used_credits"),
+            "extraMonthlyLimit": control.get("extra_monthly_limit"),
+            "extraUtilization": control.get("extra_utilization"),
+            "extraCurrency": control.get("extra_currency"),
+        }
+    )
+    if extra:
+        print(f"extra:   {extra}")
     resets_local = control.get("five_hour_reset_local")
     resets_in = control.get("seconds_until_five_hour_reset")
     if resets_local and resets_in is not None:
@@ -384,8 +396,7 @@ def cmd_poll(_: argparse.Namespace) -> int:
     try:
         usage = get_usage()
         control = read_control()
-        control["five_hour_percent"] = usage.get("fiveHourPercent")
-        control["five_hour_resets_at"] = usage.get("fiveHourResetsAt")
+        apply_usage_telemetry(control, usage)
         write_control(control)
         print(json.dumps(usage, indent=2))
         return 0

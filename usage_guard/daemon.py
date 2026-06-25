@@ -10,6 +10,7 @@ import time
 from datetime import datetime, timezone
 
 from usage_guard.control import (
+    apply_usage_telemetry,
     apply_wait_schedule,
     apply_telemetry_health,
     default_control,
@@ -42,13 +43,12 @@ def update_control_from_usage(
     *,
     config: dict,
 ) -> dict:
-    percent = usage.get("fiveHourPercent")
-    resets_at = usage.get("fiveHourResetsAt")
     threshold = config["threshold_pause"]
     warn_threshold = config["threshold_warn"]
 
-    control["five_hour_percent"] = percent
-    control["five_hour_resets_at"] = resets_at
+    apply_usage_telemetry(control, usage)
+    percent = control.get("five_hour_percent")
+    resets_at = control.get("five_hour_resets_at")
 
     if percent is not None and percent >= threshold:
         if control.get("state") != "COOLDOWN":
@@ -151,8 +151,10 @@ def run_daemon(session_id: str, *, mock_percent: float | None = None) -> int:
                 control["phase"] = "cooldown"
                 apply_wait_schedule(control, margin=config["cooldown_margin_seconds"])
             write_control(control)
+            extra_used = usage.get("extraUsedCredits")
+            extra_note = f" extra_used={extra_used}" if extra_used is not None else ""
             log(
-                f"poll percent={usage.get('fiveHourPercent')} state={control.get('state')}"
+                f"poll percent={usage.get('fiveHourPercent')} state={control.get('state')}{extra_note}"
             )
         except UsageFetchError as exc:
             log(f"poll error (fail-open, keep prior control): {exc}")

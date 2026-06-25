@@ -144,7 +144,6 @@ Config in use: `weekly_enabled: true`, `weekly_threshold_pause: 98`, `weekly_pau
 
 **What happened:** the 5-hour window had just reset (**4%**). Weekly was **99%**, so the guard entered `COOLDOWN` with `pause_reason: weekly` — the agent stopped dispatching new subagents even though the session window looked safe.
 
-![Config snippet from the dogfood session](docs/assets/weekly-config-dogfood-example.png)
 
 ![Agent reads weekly COOLDOWN while the 5-hour window is at 4%](docs/assets/weekly-cooldown-dogfood-example.png)
 

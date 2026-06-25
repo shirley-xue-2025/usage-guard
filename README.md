@@ -136,18 +136,15 @@ Optional `~/.usage-guard/config.json`:
 
 **Weekly limit (opt-in):** set `"weekly_enabled": true` to PAUSE when the account **weekly** utilization (Desktop → Settings → Usage → **"All models"**) reaches `weekly_threshold_pause` (default 98%), even if the 5-hour window is still low. Either limit can trigger PAUSE; both must clear before RUN resumes. Set `weekly_pause_within_hours` (e.g. `5`) so weekly only pauses when the weekly reset is that soon — if weekly is 99% but reset is days away, you stay `RUN` (5h guard still applies). Omit or set `null` to pause at threshold regardless of reset time. The OAuth API exposes one weekly number (`seven_day`) — not per-model Sonnet/Opus bars separately.
 
-### Example — dogfood session (screenshots)
+### Example — dogfood session (screenshot)
 
-> **These images are from a real Claude Code session**, not part of this README.
+> **This image is from a real Claude Code session**, not part of this README.
 
 Config in use: `weekly_enabled: true`, `weekly_threshold_pause: 98`, `weekly_pause_within_hours: 5`.
 
 **What happened:** the 5-hour window had just reset (**4%**). Weekly was **99%**, so the guard entered `COOLDOWN` with `pause_reason: weekly` — the agent stopped dispatching new subagents even though the session window looked safe.
 
-
-<img width="1089" height="422" alt="image" src="https://github.com/user-attachments/assets/02e50bc5-aa09-4bc7-88b6-a77d727d3d22" />
-
-)
+![Claude Code session: weekly COOLDOWN at 99% while the 5-hour window is at 4%](docs/assets/weekly-cooldown-dogfood-example.png)
 
 <details>
 <summary>Transcript (accessibility)</summary>

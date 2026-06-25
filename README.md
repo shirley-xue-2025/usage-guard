@@ -2,16 +2,19 @@
 
 [![test](https://github.com/shirley-xue-2025/usage-guard/actions/workflows/test.yml/badge.svg)](https://github.com/shirley-xue-2025/usage-guard/actions/workflows/test.yml)
 
-Opt-in proactive **5-hour usage guard** for long Claude Code sessions (macOS — Desktop Code tab and CLI).
+Opt-in proactive **usage guard** for long Claude Code sessions (macOS — Desktop Code tab and CLI). Monitors the account **5-hour window** (default pause at 90%) and, optionally, the **weekly limit** (default pause at 98%) — either can trigger a checkpoint before you hit the wall.
 
-Arm with `/usage-guard` before long batch, subagent, or overnight work — especially when the shared window is already partly used. An external daemon reads your usage (zero session tokens), sets `PAUSE` before the wall, sends macOS notifications, and you resume with `/usage-guard resume` after reset — without chat reminders that get queued behind subagents.
+Arm with `/usage-guard` before long batch, subagent, or overnight work — especially when the shared window is already partly used. An external daemon reads your usage (zero session tokens), sets `PAUSE` before limits, sends macOS notifications, and you resume with `/usage-guard resume` after reset — without chat reminders that get queued behind subagents.
+
+**Latest:** [v0.2.0](https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.2.0) — weekly limit monitoring (opt-in), extra usage wallet in status, install-path fixes.
 
 ## Who is this for?
 
 - **Long Claude Code sessions** that burn the **5-hour window** quickly (batch jobs, subagents, `/loop`, multi-session arcs)
 - Work that starts when usage is **already high** — arm gives account-level visibility, not just this chat's view
+- **Weekly limit nearly full** while the current session still looks safe (e.g. 60% session, 97% weekly) — enable weekly monitoring in config
 - **Subagent / batch** work where mid-session chat messages stay **queued**
-- You want to **pause near 90%** and avoid **extra usage wallet** charges at 100%
+- You want to **pause near 90%** (5h) or **98%** (weekly) and avoid **extra usage wallet** charges at 100%
 - **macOS** — Claude Desktop **Code** tab or Claude Code **CLI**
 - You can arm once per session (`/usage-guard`) — no per-project setup
 
@@ -21,7 +24,7 @@ Arm with `/usage-guard` before long batch, subagent, or overnight work — espec
 
 ## Why this exists
 
-On long runs, chat messages queue while subagents work — so "stop at 90%" reminders never land in time. Hitting 100% can burn **extra usage wallet**. Stop buttons may not fully halt subagents. Each chat only sees its own usage; the daemon reads the **account-level 5-hour window** (same as Desktop Settings), so a session that "looks" fine at 58% can already be at 94% shared. This tool uses an **external control file + upfront session contract** instead of mid-run chat.
+On long runs, chat messages queue while subagents work — so "stop at 90%" reminders never land in time. Hitting 100% can burn **extra usage wallet**. Stop buttons may not fully halt subagents. Each chat only sees its own usage; the daemon reads **account-level** usage (same OAuth API as Desktop Settings): the shared **5-hour window** and optional **weekly** bar. A session that "looks" fine at 58% can already be at 94% on the 5h window — or at 97% weekly while the session meter still shows 60%. This tool uses an **external control file + upfront session contract** instead of mid-run chat.
 
 ## How it works
 
@@ -36,8 +39,10 @@ Session (cooperative)  ←── read state at safe checkpoints only
 
 | Layer | Role | Tokens |
 |-------|------|--------|
-| **Daemon** | OAuth usage poll, adaptive schedule, notifications | 0 |
+| **Daemon** | OAuth usage poll (5h + weekly + extra wallet), adaptive schedule, notifications | 0 |
 | **Skill** | Arm, checkpoint rules, `/loop` timetable | Minimal reads |
+
+**Pause rule:** `PAUSE` when **either** limit hits its threshold (defaults: 5h ≥ 90%, weekly ≥ 98% if enabled). Resume when **both** are clear. See `pause_reason` in `control.json` (`five_hour`, `weekly`, or `both`).
 
 ## Install (macOS)
 
@@ -97,9 +102,9 @@ Same `/usage-guard` skill after install (shared `~/.claude/skills/`).
 ## Commands
 
 ```bash
-usage-guard doctor          # credentials + usage API check
+usage-guard doctor          # credentials + usage API (5h, weekly, extra wallet)
 usage-guard arm             # start daemon + session
-usage-guard status          # state, %, checkpoint
+usage-guard status          # state, %, weekly, checkpoint, pause_reason
 usage-guard disarm          # stop daemon
 usage-guard poll            # one-shot usage fetch
 ```
@@ -128,7 +133,17 @@ Optional `~/.usage-guard/config.json`:
 }
 ```
 
-**Weekly limit (opt-in):** set `"weekly_enabled": true` to PAUSE when the account **weekly** utilization (Desktop → Settings → Usage → "All models") reaches `weekly_threshold_pause` (default 98%), even if the 5-hour window is still low. Either limit can trigger PAUSE; both must clear before RUN resumes. The OAuth API exposes one weekly number (`seven_day`) — not per-model Sonnet/Opus bars separately.
+**Weekly limit (opt-in):** set `"weekly_enabled": true` to PAUSE when the account **weekly** utilization (Desktop → Settings → Usage → **"All models"**) reaches `weekly_threshold_pause` (default 98%), even if the 5-hour window is still low. Either limit can trigger PAUSE; both must clear before RUN resumes. The OAuth API exposes one weekly number (`seven_day`) — not per-model Sonnet/Opus bars separately.
+
+Example — weekly nearly full, session still comfortable:
+
+```json
+{
+  "weekly_enabled": true,
+  "weekly_threshold_pause": 98,
+  "weekly_threshold_warn": 95
+}
+```
 
 ## Honest limits
 
@@ -150,7 +165,7 @@ Optional `~/.usage-guard/config.json`:
 
 | Tool | When to use |
 |------|-------------|
-| **usage-guard** (this repo) | Proactive pause ~90%, checkpoints, resume after reset |
+| **usage-guard** (this repo) | Proactive pause at 5h (~90%) and/or weekly (~98%), checkpoints, resume after reset |
 | [claude-auto-retry](https://github.com/cheapestinference/claude-auto-retry) | Reactive auto-`continue` after limit message |
 | [ai-usage-monitors](https://github.com/minhvoio/ai-usage-monitors) `cu` | Check current 5h % in terminal (no guard) |
 

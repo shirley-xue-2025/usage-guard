@@ -129,11 +129,12 @@ Optional `~/.usage-guard/config.json`:
   "weekly_enabled": false,
   "weekly_threshold_pause": 98,
   "weekly_threshold_warn": 95,
+  "weekly_pause_within_hours": 5,
   "cooldown_margin_seconds": 60
 }
 ```
 
-**Weekly limit (opt-in):** set `"weekly_enabled": true` to PAUSE when the account **weekly** utilization (Desktop → Settings → Usage → **"All models"**) reaches `weekly_threshold_pause` (default 98%), even if the 5-hour window is still low. Either limit can trigger PAUSE; both must clear before RUN resumes. The OAuth API exposes one weekly number (`seven_day`) — not per-model Sonnet/Opus bars separately.
+**Weekly limit (opt-in):** set `"weekly_enabled": true` to PAUSE when the account **weekly** utilization (Desktop → Settings → Usage → **"All models"**) reaches `weekly_threshold_pause` (default 98%), even if the 5-hour window is still low. Either limit can trigger PAUSE; both must clear before RUN resumes. Set `weekly_pause_within_hours` (e.g. `5`) so weekly only pauses when the weekly reset is that soon — if weekly is 99% but reset is days away, you stay `RUN` (5h guard still applies). Omit or set `null` to pause at threshold regardless of reset time. The OAuth API exposes one weekly number (`seven_day`) — not per-model Sonnet/Opus bars separately.
 
 Example — weekly nearly full, session still comfortable:
 
@@ -141,7 +142,8 @@ Example — weekly nearly full, session still comfortable:
 {
   "weekly_enabled": true,
   "weekly_threshold_pause": 98,
-  "weekly_threshold_warn": 95
+  "weekly_threshold_warn": 95,
+  "weekly_pause_within_hours": 5
 }
 ```
 

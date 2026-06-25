@@ -99,6 +99,48 @@ def test_limit_hits_five_hour_or_weekly_either_triggers():
     assert pause_reason_from_hits(hits) == "both"
 
 
+def test_weekly_pause_skipped_when_reset_beyond_within_hours():
+    config = _config()
+    config["weekly_pause_within_hours"] = 5
+    control = {
+        "five_hour_percent": 60.0,
+        "weekly_percent": 99.0,
+        "weekly_resets_at": _future_iso(600),  # 10h out
+    }
+    hits = limit_hits(control, config)
+    assert hits["weekly"] is False
+    assert hits["any"] is False
+
+
+def test_weekly_pause_applies_when_reset_within_hours():
+    config = _config()
+    config["weekly_pause_within_hours"] = 5
+    control = {
+        "five_hour_percent": 60.0,
+        "weekly_percent": 98.0,
+        "weekly_resets_at": _future_iso(120),  # 2h out
+    }
+    hits = limit_hits(control, config)
+    assert hits["weekly"] is True
+    assert pause_reason_from_hits(hits) == "weekly"
+
+
+def test_update_control_stays_run_when_weekly_high_but_reset_far():
+    control = default_control("sess")
+    control["state"] = "RUN"
+    config = _config()
+    config["weekly_pause_within_hours"] = 5
+
+    update_control_from_usage(
+        control,
+        _usage(five_hour=60.0, weekly=99.0, weekly_resets=_future_iso(600)),
+        config=config,
+    )
+
+    assert control["state"] == "RUN"
+    assert control.get("pause_reason") is None
+
+
 def test_can_resume_requires_both_limits_clear():
     config = _config()
     assert can_resume({"five_hour_percent": 60.0, "weekly_percent": 97.0}, config)
@@ -186,10 +228,10 @@ def test_enrich_time_fields_weekly_reset_local():
     assert "weekly_reset_local" in control
 
 
-def test_load_config_weekly_defaults_off():
-    defaults = load_config()
-    assert defaults["weekly_enabled"] is False
-    assert defaults["weekly_threshold_pause"] == 98
+def test_load_config_weekly_code_defaults():
+    cfg = limits_config({})
+    assert cfg["weekly_enabled"] is False
+    assert cfg["weekly_pause"] == 98
 
 
 def test_apply_wait_schedule_weekly_cooldown_uses_resume_at():

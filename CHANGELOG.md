@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.1] - 2026-06-25
+
+### Added
+
+- **`weekly_pause_within_hours`** — weekly PAUSE only when the weekly reset is within N hours (e.g. `5`). High weekly % with a distant reset does not trigger COOLDOWN; 5h guard unchanged. Default `null` = pause at threshold regardless of reset time (v0.2.0 behavior).
+
+## [Unreleased]
+
 ## [0.2.0] - 2026-06-25
 
 ### Added

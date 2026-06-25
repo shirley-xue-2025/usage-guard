@@ -131,6 +131,7 @@ def load_config() -> dict:
         "weekly_enabled": False,
         "weekly_threshold_pause": 98,
         "weekly_threshold_warn": 95,
+        "weekly_pause_within_hours": None,
         "cooldown_margin_seconds": 60,
     }
     from usage_guard.paths import CONFIG_PATH
@@ -149,7 +150,25 @@ def limits_config(config: dict) -> dict:
         "weekly_enabled": bool(config.get("weekly_enabled", False)),
         "weekly_pause": config.get("weekly_threshold_pause", 98),
         "weekly_warn": config.get("weekly_threshold_warn", 95),
+        "weekly_pause_within_hours": config.get("weekly_pause_within_hours"),
     }
+
+
+def weekly_pause_applies(control: dict, config: dict) -> bool:
+    """Weekly % alone triggers PAUSE only when reset is within the configured window.
+
+    If weekly_pause_within_hours is null, any weekly >= threshold pauses (v0.2.0 behavior).
+    """
+    within_hours = config.get("weekly_pause_within_hours")
+    if within_hours is None:
+        return True
+    resets_at = control.get("weekly_resets_at")
+    if not resets_at:
+        return True
+    sec = seconds_until_timestamp(resets_at, margin=0)
+    if sec is None:
+        return True
+    return sec <= int(within_hours) * 3600
 
 
 def effective_poll_percent(control: dict, config: dict) -> float | None:
@@ -175,6 +194,7 @@ def limit_hits(control: dict, config: dict) -> dict[str, bool]:
         limits["weekly_enabled"]
         and wk is not None
         and wk >= limits["weekly_pause"]
+        and weekly_pause_applies(control, config)
     )
     return {"five_hour": five_hour, "weekly": weekly, "any": five_hour or weekly}
 
@@ -198,7 +218,8 @@ def can_resume(control: dict, config: dict) -> bool:
     if limits["weekly_enabled"]:
         wk = control.get("weekly_percent")
         if wk is not None and wk >= limits["weekly_pause"]:
-            return False
+            if weekly_pause_applies(control, config):
+                return False
     return True
 
 
@@ -232,7 +253,13 @@ def pause_note(reason: str | None, control: dict, config: dict) -> str:
     if reason == "both":
         return f"five_hour >= {limits['five_hour_pause']}% and weekly >= {limits['weekly_pause']}%"
     if reason == "weekly":
-        return f"weekly >= {limits['weekly_pause']}% ({wk:.0f}%)" if wk is not None else "weekly limit"
+        within = config.get("weekly_pause_within_hours")
+        window = f", reset within {within}h" if within is not None else ""
+        return (
+            f"weekly >= {limits['weekly_pause']}% ({wk:.0f}%){window}"
+            if wk is not None
+            else "weekly limit"
+        )
     return f"five_hour >= {limits['five_hour_pause']}% ({fh:.0f}%)" if fh is not None else "five_hour limit"
 
 

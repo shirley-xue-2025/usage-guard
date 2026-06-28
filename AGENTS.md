@@ -1,11 +1,5 @@
 # Agent notes — usage-guard repo
 
-For Shirley's full workspace (marketing, handover, setup gate), read the **parent** folder:
-
-`/Users/chao.xue/shirley/Usage Guard/WORKSPACE.md`
-
----
-
 ## Before changing code
 
 ```bash
@@ -29,7 +23,6 @@ python3 -m pytest tests/ -q
 - Minimal diffs; match existing style
 - Control file fields: snake_case in `control.json`; camelCase in `get_usage()` return dict
 - Weekly fields: `weekly_percent`, `weekly_resets_at`, `pause_reason`; config `weekly_enabled`, `weekly_threshold_pause`
-- Do not commit private Ring 2 docs (marketing-pack, SESSION-HANDOVER) into this repo
 
 ## Verify before claiming done
 

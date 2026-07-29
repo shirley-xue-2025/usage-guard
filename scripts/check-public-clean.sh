@@ -63,8 +63,18 @@ trap 'rm -f "$TMP"' EXIT
 git ls-files | grep -E '\.(md|py|sh|yml|yaml|json|txt|toml)$' >"$TMP" || true
 
 if [[ -s "$TMP" ]]; then
+  # Drop this script from the content scan — it must mention the patterns.
+  TMP2="$(mktemp)"
+  trap 'rm -f "$TMP" "$TMP2" "$MATCHES"' EXIT
+  grep -v 'scripts/check-public-clean\.sh$' "$TMP" >"$TMP2" || true
+  mv "$TMP2" "$TMP"
+
   MATCHES="$(mktemp)"
   trap 'rm -f "$TMP" "$MATCHES"' EXIT
+  if [[ ! -s "$TMP" ]]; then
+    echo "public-clean: OK"
+    exit 0
+  fi
   if command -v rg >/dev/null 2>&1; then
     # rg exit 1 = no match (clean); 0 = matches (dirty)
     if xargs rg -n -e "$PATTERN" <"$TMP" >"$MATCHES" 2>/dev/null; then

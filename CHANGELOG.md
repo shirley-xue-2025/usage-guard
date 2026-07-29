@@ -4,13 +4,27 @@ All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+## [0.2.2] - 2026-07-29
+
+### Fixed
+
+- **Fail closed when blind (D2):** after 3 null usage polls, `state` becomes `UNKNOWN` (no longer advertises `RUN` while telemetry is lost)
+- **Freshness contract (D3):** `control.json` emits `valid_until`, `stale`, `stale_reason`, and `effective_state` — if `now > valid_until`, consumers must treat as `UNKNOWN`
+- **Blind alert backoff (D4):** re-notify hourly for the first few hours, then daily, instead of a single vanishing banner
+- **Daemon supervision (D1):** `install.sh` ships LaunchAgent `io.usage-guard.daemon` with `KeepAlive` (`SuccessfulExit: false`) so crashes restart; clean disarm stays down. Heartbeat file at `~/.usage-guard/heartbeat`
+
+### Changed
+
+- Skill/status/docs: obey `UNKNOWN` and `valid_until`; prefer `effective_state` when present
+- **Public-clean guard:** `scripts/check-public-clean.sh` + `.githooks/pre-push` (+ CI) block Ring-2 / personal paths from shipping
+
 ## [0.2.1] - 2026-06-25
 
 ### Added
 
 - **`weekly_pause_within_hours`** — weekly PAUSE only when the weekly reset is within N hours (e.g. `5`). High weekly % with a distant reset does not trigger COOLDOWN; 5h guard unchanged. Default `null` = pause at threshold regardless of reset time (v0.2.0 behavior).
-
-## [Unreleased]
 
 ## [0.2.0] - 2026-06-25
 

@@ -77,9 +77,10 @@ You are now **usage-guard armed**. Follow this for the rest of this session:
 ### Control file (only signal that matters)
 
 - Path: `~/.usage-guard/control.json`
-- Obey **`state` only**: `RUN` = continue, `PAUSE` or `COOLDOWN` = stop dispatching new work.
+- Obey **`state` only**: `RUN` = continue, `PAUSE` / `COOLDOWN` / `UNKNOWN` = stop dispatching new work.
 - **Either limit can pause:** account **5-hour window** (default 90%) **or** **weekly limit** (opt-in, default 98%) — check `pause_reason` (`five_hour`, `weekly`, or `both`) in control.json.
-- **Exception — `telemetry_lost: true`:** usage API returned no 5h percent for several polls. Guard is **blind** — do **not** start heavy or long work; tell user to run `claude login` or `usage-guard doctor` (they may get a macOS notification). `state` may still say `RUN`.
+- **`UNKNOWN`:** guard is blind (usage API returned no 5h percent for several polls) **or** the file is past `valid_until`. Do **not** start heavy work; tell user to run `claude login` or `usage-guard doctor`. Prefer `effective_state` if present — it already fails closed on staleness/blindness.
+- **Freshness:** if `now` is past `valid_until` (or `stale: true`), treat as `UNKNOWN` even when `state` still says `RUN` (daemon may have died while numbers looked healthy).
 - **Never** decide pause/continue from `five_hour_percent` yourself.
 - **Never compare timestamps yourself** (`five_hour_resets_at`, `sleep_until`, etc.). UTC trips up models. Use precomputed fields only:
   - `seconds_until_five_hour_reset` — positive = reset not yet; negative or `five_hour_reset_pending: false` = reset time passed

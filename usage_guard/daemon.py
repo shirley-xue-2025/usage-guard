@@ -20,6 +20,7 @@ from usage_guard.control import (
     limit_hits,
     limits_config,
     load_config,
+    new_session_id,
     now_iso,
     pause_note,
     pause_reason_from_hits,
@@ -27,6 +28,7 @@ from usage_guard.control import (
     read_control,
     resume_at_for_pause,
     seconds_until_reset,
+    touch_heartbeat,
     write_control,
 )
 from usage_guard.notify import notify
@@ -87,13 +89,18 @@ def update_control_from_usage(
     limits = limits_config(config)
 
     apply_usage_telemetry(control, usage)
+    control["last_poll_at"] = now_iso()
+    touch_heartbeat()
     fh = control.get("five_hour_percent")
     hits = limit_hits(control, config)
     reason = pause_reason_from_hits(hits)
 
     if hits["any"]:
         if control.get("state") != "COOLDOWN":
-            entering_pause = control.get("state") not in {"PAUSE", "COOLDOWN"}
+            entering_pause = control.get("state") not in {"PAUSE", "COOLDOWN", "UNKNOWN"}
+            # Blind → limit known again: still notify if leaving UNKNOWN into PAUSE.
+            if control.get("state") == "UNKNOWN":
+                entering_pause = True
             control["state"] = "PAUSE"
             control["phase"] = "pause"
             control["pause_reason"] = reason
@@ -109,7 +116,21 @@ def update_control_from_usage(
         control["last_reset_at"] = now_iso()
         control["note"] = "usage dropped below threshold"
         _notify_resume(control, config)
-    elif control.get("state") not in {"PAUSE", "COOLDOWN"} and can_resume(control, config):
+    elif (
+        control.get("state") == "UNKNOWN"
+        and fh is not None
+        and can_resume(control, config)
+    ):
+        control["state"] = "RUN"
+        control["phase"] = "normal"
+        control["resume_at"] = None
+        control["pause_reason"] = None
+        control["note"] = "telemetry recovered"
+        _notify_resume(control, config)
+    elif (
+        control.get("state") not in {"PAUSE", "COOLDOWN", "UNKNOWN"}
+        and can_resume(control, config)
+    ):
         control["state"] = "RUN"
         control["phase"] = "normal"
         control["resume_at"] = None
@@ -156,6 +177,20 @@ def update_control_from_usage(
     return control
 
 
+def run_supervised(*, mock_percent: float | None = None) -> int:
+    """LaunchAgent entry: exit 0 when not armed so KeepAlive does not loop."""
+    ensure_dirs()
+    write_pid()
+    control = read_control()
+    if not control.get("armed"):
+        log("supervised: not armed; exiting cleanly")
+        PID_PATH.unlink(missing_ok=True)
+        return 0
+    session_id = control.get("session_id") or new_session_id()
+    log(f"supervised start session={session_id}")
+    return run_daemon(session_id, mock_percent=mock_percent)
+
+
 def run_daemon(session_id: str, *, mock_percent: float | None = None) -> int:
     ensure_dirs()
     config = load_config()
@@ -174,6 +209,7 @@ def run_daemon(session_id: str, *, mock_percent: float | None = None) -> int:
         control = read_control()
         if not control.get("armed"):
             log("disarmed; exiting")
+            PID_PATH.unlink(missing_ok=True)
             return 0
 
         if control.get("state") == "COOLDOWN":
@@ -265,11 +301,14 @@ def stop_daemon() -> bool:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--session-id", required=True)
+    parser.add_argument("--session-id", default=None)
+    parser.add_argument(
+        "--supervised",
+        action="store_true",
+        help="LaunchAgent mode: read session from control.json; exit 0 if not armed",
+    )
     parser.add_argument("--mock-percent", type=float, default=None)
     args = parser.parse_args(argv)
-
-    write_pid()
 
     def handle_sigterm(_signum, _frame):
         log("received SIGTERM")
@@ -277,6 +316,14 @@ def main(argv: list[str] | None = None) -> int:
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, handle_sigterm)
+
+    if args.supervised:
+        return run_supervised(mock_percent=args.mock_percent)
+
+    if not args.session_id:
+        parser.error("--session-id is required unless --supervised")
+
+    write_pid()
     return run_daemon(args.session_id, mock_percent=args.mock_percent)
 
 

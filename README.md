@@ -6,7 +6,7 @@ Opt-in proactive **usage guard** for long Claude Code sessions (macOS — Deskto
 
 Arm with `/usage-guard` before long batch, subagent, or overnight work — especially when the shared window is already partly used. An external daemon reads your usage (zero session tokens), sets `PAUSE` before limits, sends macOS notifications, and you resume with `/usage-guard resume` after reset — without chat reminders that get queued behind subagents.
 
-**Latest:** [v0.2.0](https://github.com/shirley-xue-2025/usage-guard/releases/tag/v0.2.0) — weekly limit monitoring (opt-in), extra usage wallet in status, install-path fixes.
+**Latest:** **v0.2.2** — fail-closed when blind (`UNKNOWN`), `valid_until` freshness, LaunchAgent KeepAlive, blind-alert backoff. See [CHANGELOG](CHANGELOG.md) / [release notes](docs/releases/v0.2.2.md).
 
 ## Who is this for?
 
@@ -43,6 +43,10 @@ Session (cooperative)  ←── read state at safe checkpoints only
 | **Skill** | Arm, checkpoint rules, `/loop` timetable | Minimal reads |
 
 **Pause rule:** `PAUSE` when **either** limit hits its threshold (defaults: 5h ≥ 90%, weekly ≥ 98% if enabled). Resume when **both** are clear. See `pause_reason` in `control.json` (`five_hour`, `weekly`, or `both`).
+
+**Consumer contract:** obey `state` (`RUN` / `PAUSE` / `COOLDOWN` / `UNKNOWN`). If `now > valid_until` (or `stale: true` / prefer `effective_state`), treat as `UNKNOWN` even when `state` still says `RUN` — the daemon may have died while numbers looked healthy. `state` never stays `RUN` while `telemetry_lost` is true.
+
+`./install.sh` also installs a macOS LaunchAgent (`io.usage-guard.daemon`) with KeepAlive so a crashed daemon restarts; `disarm` exits cleanly and stays down.
 
 ## Install (macOS)
 

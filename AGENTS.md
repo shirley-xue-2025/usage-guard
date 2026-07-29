@@ -17,6 +17,17 @@ python3 -m pytest tests/ -q
 - `usage_guard/` — Python package (CLI + daemon)
 - `skill/usage-guard/` — source skill copied by `install.sh` to `~/.claude/skills/`
 - `tests/` — pytest, no network
+- `scripts/check-public-clean.sh` — blocks Ring-2 / personal content before push (also CI)
+
+## Public vs private
+
+This git repo is **public**. Session handover, marketing drafts, and workspace notes live in the parent folder (outside this clone) and must never be committed here. Before pushing:
+
+```bash
+bash scripts/check-public-clean.sh
+# or enable the hook once per clone:
+git config core.hooksPath .githooks
+```
 
 ## Conventions
 

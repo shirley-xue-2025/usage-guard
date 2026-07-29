@@ -28,7 +28,16 @@ export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 
 usage-guard doctor    # needs `claude login` for live usage
 python3 -m pytest tests/ -q
+bash scripts/check-public-clean.sh   # blocks Ring-2 / personal leaks
 ```
+
+Enable the pre-push hook once per clone (recommended for maintainers):
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The same clean check runs in CI on every push/PR.
 
 ### Mock mode (no OAuth)
 

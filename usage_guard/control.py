@@ -6,11 +6,18 @@ import json
 import os
 import tempfile
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from usage_guard.paths import CONTROL_PATH, GUARD_DIR, SESSIONS_DIR
+from usage_guard.paths import CONTROL_PATH, GUARD_DIR, HEARTBEAT_PATH, SESSIONS_DIR
+
+# How long after the expected next poll a control.json stays trustworthy.
+VALID_UNTIL_GRACE_SECONDS = 120
+# Blind-alert cadence: immediate, then hourly ×3, then daily.
+TELEMETRY_NOTIFY_HOURLY_CAP = 4
+TELEMETRY_NOTIFY_HOURLY_SECONDS = 3600
+TELEMETRY_NOTIFY_DAILY_SECONDS = 86400
 
 
 def now_iso() -> str:
@@ -34,12 +41,18 @@ def default_control(session_id: str | None = None) -> dict:
         "resume_at": None,
         "sleep_until": None,
         "last_reset_at": None,
+        "last_poll_at": None,
+        "valid_until": None,
+        "stale": False,
+        "stale_reason": None,
         "active_session_ids": [],
         "sitting_session_id": None,
         "daemon_next_poll_at": None,
         "consecutive_null_polls": 0,
         "telemetry_lost": False,
         "telemetry_lost_notified": False,
+        "telemetry_lost_last_notify_at": None,
+        "telemetry_lost_notify_count": 0,
         "session_check_seconds": 600,
         "phase": "idle",
         "warned_at_85": False,
@@ -70,6 +83,15 @@ def read_json(path: Path) -> dict | None:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return None
+
+
+def touch_heartbeat() -> None:
+    """Liveness signal for consumers that cannot inspect processes."""
+    try:
+        GUARD_DIR.mkdir(parents=True, exist_ok=True)
+        HEARTBEAT_PATH.write_text(now_iso() + "\n", encoding="utf-8")
+    except OSError:
+        pass
 
 
 def write_control(payload: dict) -> None:
@@ -313,6 +335,62 @@ def format_local_time(value: str | None) -> str | None:
     return reset_dt.astimezone().strftime("%Y-%m-%d %H:%M %Z")
 
 
+def apply_valid_until(control: dict, config: dict | None = None) -> dict:
+    """Emit freshness contract: last_poll_at + expected interval + grace.
+
+    Consumers: if now > valid_until, treat the file as UNKNOWN regardless of state.
+    """
+    last_poll = control.get("last_poll_at")
+    if not last_poll or not control.get("armed"):
+        control["valid_until"] = None
+        control["stale"] = bool(control.get("armed")) and not last_poll
+        control["stale_reason"] = "never_polled" if control.get("stale") else None
+        control.pop("valid_until_local", None)
+        control.pop("seconds_until_valid_until", None)
+        return control
+
+    if config is None:
+        config = load_config()
+    interval = poll_interval_seconds(effective_poll_percent(control, config))
+    if interval <= 0:
+        interval = 60
+    last_dt = parse_reset_at(last_poll)
+    if last_dt is None:
+        control["valid_until"] = None
+        control["stale"] = True
+        control["stale_reason"] = "invalid_last_poll_at"
+        return control
+    if last_dt.tzinfo is None:
+        last_dt = last_dt.replace(tzinfo=timezone.utc)
+
+    valid_dt = last_dt + timedelta(seconds=interval + VALID_UNTIL_GRACE_SECONDS)
+    control["valid_until"] = valid_dt.astimezone().replace(microsecond=0).isoformat()
+    local = format_local_time(control["valid_until"])
+    if local:
+        control["valid_until_local"] = local
+    sec = seconds_until_timestamp(control["valid_until"], margin=0)
+    if sec is not None:
+        control["seconds_until_valid_until"] = sec
+        control["stale"] = sec < 0
+        control["stale_reason"] = "poll_overdue" if sec < 0 else None
+    else:
+        control["stale"] = False
+        control["stale_reason"] = None
+    return control
+
+
+def effective_state(control: dict) -> str:
+    """State consumers should obey — fails closed on blindness or staleness."""
+    if control.get("stale") or control.get("telemetry_lost"):
+        return "UNKNOWN"
+    if control.get("valid_until"):
+        sec = seconds_until_timestamp(control.get("valid_until"), margin=0)
+        if sec is not None and sec < 0:
+            return "UNKNOWN"
+    state = control.get("state")
+    return state if state else "UNKNOWN"
+
+
 def enrich_time_fields(control: dict) -> dict:
     """Add precomputed timing fields so sessions never parse UTC themselves."""
     resets_at = control.get("five_hour_resets_at")
@@ -336,12 +414,6 @@ def enrich_time_fields(control: dict) -> dict:
     else:
         control.pop("seconds_until_sleep_until", None)
         control.pop("sleep_until_local", None)
-
-    resume_at = control.get("resume_at")
-    if resume_at:
-        local = format_local_time(resume_at)
-        if local:
-            control["resume_at_local"] = local
 
     resume_at = control.get("resume_at")
     if resume_at:
@@ -383,6 +455,9 @@ def enrich_time_fields(control: dict) -> dict:
         control["daemon_next_poll_local"] = poll_dt.astimezone().strftime(
             "%Y-%m-%d %H:%M %Z"
         )
+
+    apply_valid_until(control)
+    control["effective_state"] = effective_state(control)
 
     return control
 
@@ -434,30 +509,58 @@ def apply_wait_schedule(
     return control
 
 
+def _telemetry_notify_due(control: dict) -> bool:
+    """Re-alert on backoff: immediate, hourly ×3, then daily."""
+    last = control.get("telemetry_lost_last_notify_at")
+    if not last:
+        return True
+    elapsed = seconds_until_timestamp(last, margin=0)
+    if elapsed is None:
+        return True
+    # seconds_until is negative when last is in the past; want age in seconds.
+    age = -elapsed
+    count = int(control.get("telemetry_lost_notify_count") or 0)
+    interval = (
+        TELEMETRY_NOTIFY_HOURLY_SECONDS
+        if count < TELEMETRY_NOTIFY_HOURLY_CAP
+        else TELEMETRY_NOTIFY_DAILY_SECONDS
+    )
+    return age >= interval
+
+
 def apply_telemetry_health(control: dict, percent: float | None) -> bool:
     """Track blind polls when the usage API returns null percent.
 
-    Returns True when telemetry is newly lost and a user alert should fire.
+    Fail closed: state becomes UNKNOWN while blind (never advertise RUN).
+    Returns True when a user alert should fire (first loss or backoff re-alert).
     """
     if percent is not None:
         control["consecutive_null_polls"] = 0
         control["telemetry_lost"] = False
         control["telemetry_lost_notified"] = False
+        control["telemetry_lost_last_notify_at"] = None
+        control["telemetry_lost_notify_count"] = 0
         if control.get("phase") == "telemetry_lost":
             control["phase"] = "normal"
+        # State transitions (UNKNOWN→RUN/PAUSE) are owned by update_control_from_usage.
         return False
 
     n = int(control.get("consecutive_null_polls") or 0) + 1
     control["consecutive_null_polls"] = n
     if n >= 3:
         control["telemetry_lost"] = True
+        control["state"] = "UNKNOWN"
         control["phase"] = "telemetry_lost"
         control["note"] = (
             "usage API returned no 5h percent — guard is blind; "
             "run claude login or usage-guard doctor"
         )
-        if not control.get("telemetry_lost_notified"):
+        if _telemetry_notify_due(control):
             control["telemetry_lost_notified"] = True
+            control["telemetry_lost_last_notify_at"] = now_iso()
+            control["telemetry_lost_notify_count"] = (
+                int(control.get("telemetry_lost_notify_count") or 0) + 1
+            )
             return True
     return False
 

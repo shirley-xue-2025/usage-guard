@@ -5,3 +5,10 @@ __pycache__/
 .venv/
 venv/
 .pytest_cache/
+
+# Ring-2 hub files — never belong in this public clone
+SESSION-HANDOVER.md
+WORKSPACE.md
+marketing-pack.md
+medium-draft.md
+/memory/

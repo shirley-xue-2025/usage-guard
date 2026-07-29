@@ -246,3 +246,27 @@ def test_apply_wait_schedule_weekly_cooldown_uses_resume_at():
     apply_wait_schedule(control, config=_config())
     assert control["sleep_until"] == reset_at
     assert control["session_check_seconds"] == 59 * 60
+
+
+def test_update_control_null_percent_sets_unknown_after_three():
+    control = default_control("blind")
+    control["armed"] = True
+    control["state"] = "RUN"
+    null_usage = {
+        "fiveHourPercent": None,
+        "fiveHourResetsAt": None,
+        "weeklyPercent": None,
+        "weeklyResetsAt": None,
+        "extraEnabled": None,
+        "extraUsedCredits": None,
+        "extraMonthlyLimit": None,
+        "extraUtilization": None,
+        "extraCurrency": None,
+    }
+    cfg = _config(weekly_enabled=False)
+    for _ in range(3):
+        update_control_from_usage(control, null_usage, config=cfg)
+    assert control["telemetry_lost"] is True
+    assert control["state"] == "UNKNOWN"
+    assert control.get("last_poll_at")
+

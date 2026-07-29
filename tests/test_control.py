@@ -12,6 +12,7 @@ from usage_guard.control import (
     apply_wait_schedule,
     checkpoint_session_id,
     default_control,
+    effective_state,
     enrich_time_fields,
     merge_done,
     poll_interval_seconds,
@@ -105,18 +106,78 @@ def test_checkpoint_session_id_prefers_sitting():
 
 
 def test_apply_telemetry_health_marks_lost_after_three_nulls():
-    control: dict = {"consecutive_null_polls": 0, "phase": "normal"}
+    control: dict = {"consecutive_null_polls": 0, "phase": "normal", "state": "RUN"}
     assert apply_telemetry_health(control, None) is False
     assert apply_telemetry_health(control, None) is False
     assert control.get("telemetry_lost") is not True
     assert apply_telemetry_health(control, None) is True
     assert control["telemetry_lost"] is True
+    assert control["state"] == "UNKNOWN"
     assert control["phase"] == "telemetry_lost"
     assert control["telemetry_lost_notified"] is True
+    assert control["telemetry_lost_notify_count"] == 1
+    # Same poll window: no immediate re-notify
     assert apply_telemetry_health(control, None) is False
     apply_telemetry_health(control, 42.0)
     assert control["telemetry_lost"] is False
     assert control["telemetry_lost_notified"] is False
+    assert control["telemetry_lost_notify_count"] == 0
+
+
+def test_apply_telemetry_health_renotifies_after_backoff():
+    past = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    control: dict = {
+        "consecutive_null_polls": 3,
+        "phase": "telemetry_lost",
+        "state": "UNKNOWN",
+        "telemetry_lost": True,
+        "telemetry_lost_notified": True,
+        "telemetry_lost_last_notify_at": past,
+        "telemetry_lost_notify_count": 1,
+    }
+    assert apply_telemetry_health(control, None) is True
+    assert control["telemetry_lost_notify_count"] == 2
+
+
+def test_valid_until_and_effective_state_fail_closed_when_stale():
+    past_poll = (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat()
+    control = {
+        "armed": True,
+        "state": "RUN",
+        "five_hour_percent": 29.0,
+        "weekly_percent": None,
+        "last_poll_at": past_poll,
+        "telemetry_lost": False,
+    }
+    enrich_time_fields(control)
+    assert control["stale"] is True
+    assert control["stale_reason"] == "poll_overdue"
+    assert control["valid_until"]
+    assert effective_state(control) == "UNKNOWN"
+
+
+def test_valid_until_fresh_when_recent_poll():
+    recent = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat()
+    control = {
+        "armed": True,
+        "state": "RUN",
+        "five_hour_percent": 29.0,
+        "last_poll_at": recent,
+        "telemetry_lost": False,
+    }
+    enrich_time_fields(control)
+    assert control["stale"] is False
+    assert effective_state(control) == "RUN"
+
+
+def test_effective_state_unknown_when_telemetry_lost():
+    control = {
+        "armed": True,
+        "state": "RUN",  # legacy fail-open shape
+        "telemetry_lost": True,
+        "stale": False,
+    }
+    assert effective_state(control) == "UNKNOWN"
 
 
 def test_apply_wait_schedule_run_clears_sleep_until():

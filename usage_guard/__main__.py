@@ -28,9 +28,21 @@ from usage_guard.control import (
     write_control,
 )
 from usage_guard.daemon import stop_daemon
-from usage_guard.paths import CONTROL_PATH, GUARD_DIR, LOG_PATH, PID_PATH
+from usage_guard import launchd as launchd_mod
+from usage_guard.paths import (
+    CONTROL_PATH,
+    GUARD_DIR,
+    LAUNCHD_LABEL,
+    LAUNCHD_PLIST_PATH,
+    LOG_PATH,
+    PID_PATH,
+)
 from usage_guard.update_check import check_for_update, print_update_notice
 from usage_guard.usage_fetch import UsageFetchError, doctor, format_extra_usage, get_usage
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
 
 
 def _python() -> str:
@@ -50,6 +62,32 @@ def _daemon_alive() -> bool:
         return True
     except OSError:
         return False
+
+
+def _start_daemon(session_id: str, *, mock_percent: float | None = None) -> str:
+    """Start daemon via LaunchAgent when installed; else legacy Popen.
+
+    Returns ``launchd`` or ``popen``.
+    """
+    if (
+        mock_percent is None
+        and launchd_mod.launchd_supported()
+        and LAUNCHD_PLIST_PATH.exists()
+        and launchd_mod.kickstart(kill=True)
+    ):
+        return "launchd"
+    daemon_cmd = _daemon_module() + ["--session-id", session_id]
+    if mock_percent is not None:
+        daemon_cmd += ["--mock-percent", str(mock_percent)]
+    log_handle = open(LOG_PATH, "a", encoding="utf-8")
+    subprocess.Popen(
+        daemon_cmd,
+        stdout=log_handle,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+        cwd=str(_repo_root()),
+    )
+    return "popen"
 
 
 def wait_for_first_poll(*, timeout: float = 45.0, interval: float = 0.5) -> bool:
@@ -81,7 +119,8 @@ def _arm_status_warnings(prior: dict, *, prior_daemon_alive: bool) -> str | None
     if prior.get("armed") and not prior_daemon_alive:
         return (
             "Guard was armed but daemon was not running — re-armed fresh. "
-            "Re-arm at the start of every sitting; arms do not survive quit or crash."
+            "With LaunchAgent KeepAlive, crashes auto-restart; "
+            "re-arm after disarm, logout without agent, or a clean exit."
         )
     if not prior.get("armed"):
         return (
@@ -208,18 +247,7 @@ def cmd_arm(args: argparse.Namespace) -> int:
     )
     write_control(control)
 
-    daemon_cmd = _daemon_module() + ["--session-id", session_id]
-    if args.mock_percent is not None:
-        daemon_cmd += ["--mock-percent", str(args.mock_percent)]
-
-    log_handle = open(LOG_PATH, "a", encoding="utf-8")
-    subprocess.Popen(
-        daemon_cmd,
-        stdout=log_handle,
-        stderr=subprocess.STDOUT,
-        start_new_session=True,
-        cwd=str(Path(__file__).resolve().parents[1]),
-    )
+    start_via = _start_daemon(session_id, mock_percent=args.mock_percent)
 
     (session_dir(session_id) / "armed_at").write_text(
         datetime.now(timezone.utc).isoformat(),
@@ -229,6 +257,7 @@ def cmd_arm(args: argparse.Namespace) -> int:
     result: dict = {
         "session_id": session_id,
         "control_path": str(CONTROL_PATH),
+        "daemon_start": start_via,
         "prior_armed": bool(prior.get("armed")),
         "prior_daemon_alive": prior_daemon_alive,
     }
@@ -291,8 +320,19 @@ def cmd_status(_: argparse.Namespace) -> int:
     print("─" * 40)
     print(f"armed:   {control.get('armed')}")
     if control.get("telemetry_lost"):
-        print("alert:   telemetry_lost — API returned no 5h %; do not trust RUN for heavy work")
+        print("alert:   telemetry_lost — API returned no 5h %; state is UNKNOWN")
+    if control.get("stale"):
+        print(
+            f"alert:   stale ({control.get('stale_reason')}) — "
+            "past valid_until; treat as UNKNOWN"
+        )
     print(f"state:   {control.get('state')} ({control.get('phase')})")
+    if control.get("effective_state") and control.get("effective_state") != control.get(
+        "state"
+    ):
+        print(f"obey:    {control.get('effective_state')} (effective_state)")
+    if control.get("valid_until_local") or control.get("valid_until"):
+        print(f"fresh:   until {control.get('valid_until_local') or control.get('valid_until')}")
     if control.get("pause_reason"):
         print(f"limit:   paused for {control.get('pause_reason')}")
     print(f"5h:      {control.get('five_hour_percent')}%")
@@ -350,6 +390,11 @@ def cmd_status(_: argparse.Namespace) -> int:
         print(f"daemon:  pid {PID_PATH.read_text(encoding='utf-8').strip()}")
     else:
         print("daemon:  not running")
+    if launchd_mod.launchd_supported() and LAUNCHD_PLIST_PATH.exists():
+        print(
+            f"launchd: {LAUNCHD_LABEL} "
+            f"({'loaded' if launchd_mod.is_loaded() else 'plist present, not loaded'})"
+        )
     return 0
 
 

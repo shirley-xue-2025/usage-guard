@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Block push if the public clone contains Ring-2 / personal content.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+exec "$ROOT/scripts/check-public-clean.sh"

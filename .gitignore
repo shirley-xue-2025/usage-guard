@@ -6,7 +6,8 @@ __pycache__/
 venv/
 .pytest_cache/
 
-# Ring-2 hub files — never belong in this public clone
+# Also ignore private filenames if someone copies them into the clone by mistake.
+# Listed as basename patterns so the public-clean content scan need not read this file.
 SESSION-HANDOVER.md
 WORKSPACE.md
 marketing-pack.md
